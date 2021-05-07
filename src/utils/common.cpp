@@ -8,7 +8,6 @@
 
 #include "common.hpp"
 #include "constants.hpp"
-
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -18,7 +17,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <thread>
-
 #include <unistd.h>
 
 static_assert(sizeof(char) == sizeof(uint8_t));
@@ -28,7 +26,7 @@ static_assert(sizeof(float) == sizeof(uint32_t));
 static_assert(sizeof(double) == sizeof(uint64_t));
 static_assert(sizeof(long long) == sizeof(uint64_t));
 
-static std::atomic<int> g_idCounter = 1;
+static std::atomic<int> IdCounter = 1;
 
 static bool IPv6FromString(const char *szAddress, uint8_t *address)
 {
@@ -137,7 +135,7 @@ std::vector<uint8_t> utils::HexStringToVector(const std::string &hex)
 
 int utils::NextId()
 {
-    int res = ++g_idCounter;
+    int res = ++IdCounter;
     if (res == 0)
     {
         // ID counter overflows.
@@ -223,33 +221,6 @@ std::string utils::VectorToHexString(const std::vector<uint8_t> &hex)
     return str;
 }
 
-bool utils::TryParseInt(const std::string &str, int &output)
-{
-    return TryParseInt(str.c_str(), output);
-}
-
-bool utils::TryParseInt(const char *str, int &output)
-{
-    int base = 10;
-    if (strlen(str) > 2)
-    {
-        if (str[0] == '0' && str[1] == 'x')
-            base = 16;
-        else if (str[0] == '0' && str[1] == 'b')
-            base = 2;
-    }
-
-    try
-    {
-        output = std::stoi(str, nullptr, base);
-        return true;
-    }
-    catch (...)
-    {
-        return false;
-    }
-}
-
 int utils::ParseInt(const std::string &str)
 {
     return ParseInt(str.c_str());
@@ -257,9 +228,11 @@ int utils::ParseInt(const std::string &str)
 
 int utils::ParseInt(const char *str)
 {
-    int n = 0;
-    TryParseInt(str, n);
-    return n;
+    std::stringstream ss("");
+    ss << str;
+    int i;
+    ss >> i;
+    return i;
 }
 
 uint64_t utils::Random64()
@@ -333,8 +306,6 @@ bool utils::IsNumeric(const std::string &str)
 
 void utils::Trim(std::string &s)
 {
-    if (s.length() == 0)
-        return;
     s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
     s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), s.end());
 }

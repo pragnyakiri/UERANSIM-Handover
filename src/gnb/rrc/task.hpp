@@ -8,14 +8,13 @@
 
 #pragma once
 
+#include <gnb/nts.hpp>
 #include <memory>
 #include <thread>
 #include <unordered_map>
-#include <vector>
-
-#include <gnb/nts.hpp>
 #include <utils/logger.hpp>
 #include <utils/nts.hpp>
+#include <vector>
 
 extern "C"
 {
@@ -37,6 +36,7 @@ namespace nr::gnb
 {
 
 class NgapTask;
+class GnbMrTask;
 
 class GnbRrcTask : public NtsTask
 {
@@ -71,8 +71,6 @@ class GnbRrcTask : public NtsTask
     void deliverUplinkNas(int ueId, OctetString &&nasPdu);
     void releaseConnection(int ueId);
     void handleRadioLinkFailure(int ueId);
-    void handlePaging(const asn::Unique<ASN_NGAP_FiveG_S_TMSI> &tmsi,
-                      const asn::Unique<ASN_NGAP_TAIListForPaging> &taiList);
 
     void receiveUplinkInformationTransfer(int ueId, const ASN_RRC_ULInformationTransfer &msg);
     void receiveRrcSetupRequest(int ueId, const ASN_RRC_RRCSetupRequest &msg);
@@ -83,10 +81,17 @@ class GnbRrcTask : public NtsTask
     void sendRrcMessage(int ueId, ASN_RRC_BCCH_DL_SCH_Message *msg);
     void sendRrcMessage(int ueId, ASN_RRC_DL_CCCH_Message *msg);
     void sendRrcMessage(int ueId, ASN_RRC_DL_DCCH_Message *msg);
-    void sendRrcMessage(ASN_RRC_PCCH_Message *msg);
+    void sendRrcMessage(int ueId, ASN_RRC_PCCH_Message *msg);
+    void sendRrcMessage(int ueId, ASN_RRC_UL_CCCH_Message *msg);
+    void sendRrcMessage(int ueId, ASN_RRC_UL_CCCH1_Message *msg);
+    void sendRrcMessage(int ueId, ASN_RRC_UL_DCCH_Message *msg);
 
     /* RRC channel receive message */
     void receiveRrcMessage(int ueId, ASN_RRC_BCCH_BCH_Message *msg);
+    void receiveRrcMessage(int ueId, ASN_RRC_BCCH_DL_SCH_Message *msg);
+    void receiveRrcMessage(int ueId, ASN_RRC_DL_CCCH_Message *msg);
+    void receiveRrcMessage(int ueId, ASN_RRC_DL_DCCH_Message *msg);
+    void receiveRrcMessage(int ueId, ASN_RRC_PCCH_Message *msg);
     void receiveRrcMessage(int ueId, ASN_RRC_UL_CCCH_Message *msg);
     void receiveRrcMessage(int ueId, ASN_RRC_UL_CCCH1_Message *msg);
     void receiveRrcMessage(int ueId, ASN_RRC_UL_DCCH_Message *msg);

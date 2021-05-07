@@ -8,25 +8,24 @@
 
 #pragma once
 
-#include <lib/app/monitor.hpp>
-#include <lib/asn/utils.hpp>
-#include <utils/common_types.hpp>
-#include <utils/logger.hpp>
-#include <utils/network.hpp>
-#include <utils/nts.hpp>
-#include <utils/octet_string.hpp>
-
+#include <app/monitor.hpp>
 #include <asn/ngap/ASN_NGAP_QosFlowSetupRequestList.h>
 #include <asn/rrc/ASN_RRC_InitialUE-Identity.h>
+#include <asn/utils/utils.hpp>
+#include <string>
+#include <utils/common_types.hpp>
+#include <utils/logger.hpp>
+#include <utils/nts.hpp>
+#include <utils/octet_string.hpp>
 
 namespace nr::gnb
 {
 
 class GnbAppTask;
 class GtpTask;
+class GnbMrTask;
 class NgapTask;
 class GnbRrcTask;
-class GnbRlsTask;
 class SctpTask;
 
 enum class EAmfState
@@ -102,18 +101,6 @@ struct NgapAmfContext
     OverloadInfo overloadInfo{};
     std::vector<ServedGuami *> servedGuamiList{};
     std::vector<PlmnSupport *> plmnSupportList{};
-};
-
-struct RlsUeContext
-{
-    const int ueId;
-    uint64_t sti{};
-    InetAddress addr{};
-    int64_t lastSeen{};
-
-    explicit RlsUeContext(int ueId) : ueId(ueId)
-    {
-    }
 };
 
 struct AggregateMaximumBitRate
@@ -302,7 +289,7 @@ struct GnbConfig
     int gnbIdLength{}; // 22..32 bit
     Plmn plmn{};
     int tac{};
-    NetworkSlice nssai{};
+    std::vector<SliceSupport> nssais{};
     std::vector<GnbAmfConfig> amfConfigs{};
     std::string portalIp{};
     std::string ngapIp{};
@@ -312,7 +299,6 @@ struct GnbConfig
     /* Assigned by program */
     std::string name{};
     EPagingDrx pagingDrx{};
-    Vector3 phyLocation{};
 
     [[nodiscard]] inline uint32_t getGnbId() const
     {
@@ -334,10 +320,16 @@ struct TaskBase
 
     GnbAppTask *appTask{};
     GtpTask *gtpTask{};
+    GnbMrTask *mrTask{};
     NgapTask *ngapTask{};
     GnbRrcTask *rrcTask{};
     SctpTask *sctpTask{};
-    GnbRlsTask *rlsTask{};
+};
+
+struct MrUeContext
+{
+    int ueId{};
+    std::string name{};
 };
 
 Json ToJson(const GnbStatusInfo &v);

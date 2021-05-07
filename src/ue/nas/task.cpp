@@ -12,7 +12,7 @@
 static const int NTS_TIMER_ID_NAS_TIMER_CYCLE = 1;
 static const int NTS_TIMER_ID_MM_CYCLE = 2;
 static const int NTS_TIMER_INTERVAL_NAS_TIMER_CYCLE = 1000;
-static const int NTS_TIMER_INTERVAL_MM_CYCLE = 1100;
+static const int NTS_TIMER_INTERVAL_MM_CYCLE = 400;
 
 namespace nr::ue
 {
@@ -23,18 +23,19 @@ NasTask::NasTask(TaskBase *base) : base{base}, timers{}
 
     mm = new NasMm(base, &timers);
     sm = new NasSm(base, &timers);
-    usim = new Usim();
 }
 
 void NasTask::onStart()
 {
-    usim->initialize(base->config->supi.has_value(), base->config->initials);
+    logger->debug("NAS layer started");
 
     sm->onStart(mm);
-    mm->onStart(sm, usim);
+    mm->onStart(sm);
 
     setTimer(NTS_TIMER_ID_NAS_TIMER_CYCLE, NTS_TIMER_INTERVAL_NAS_TIMER_CYCLE);
     setTimer(NTS_TIMER_ID_MM_CYCLE, NTS_TIMER_INTERVAL_MM_CYCLE);
+
+    mm->triggerMmCycle();
 }
 
 void NasTask::onQuit()
@@ -44,8 +45,6 @@ void NasTask::onQuit()
 
     delete mm;
     delete sm;
-
-    delete usim;
 }
 
 void NasTask::onLoop()
@@ -57,42 +56,51 @@ void NasTask::onLoop()
     switch (msg->msgType)
     {
     case NtsMessageType::UE_RRC_TO_NAS: {
-        mm->handleRrcEvent(*dynamic_cast<NwUeRrcToNas *>(msg));
+        auto *w = dynamic_cast<NwUeRrcToNas *>(msg);
+        switch (w->present)
+        {
+        case NwUeRrcToNas::RRC_CONNECTION_SETUP: {
+            mm->handleRrcConnectionSetup();
+            break;
+        }
+        case NwUeRrcToNas::PLMN_SEARCH_RESPONSE: {
+            mm->handlePlmnSearchResponse(w->gnbName);
+            break;
+        }
+        case NwUeRrcToNas::PLMN_SEARCH_FAILURE: {
+            mm->handlePlmnSearchFailure();
+            break;
+        }
+        case NwUeRrcToNas::NAS_DELIVERY: {
+            OctetView buffer{w->nasPdu};
+            auto nasMessage = nas::DecodeNasMessage(buffer);
+            if (nasMessage != nullptr)
+                mm->receiveNasMessage(*nasMessage);
+            break;
+        }
+        case NwUeRrcToNas::RRC_CONNECTION_RELEASE: {
+            mm->handleRrcConnectionRelease();
+            break;
+        }
+        case NwUeRrcToNas::RADIO_LINK_FAILURE: {
+            mm->handleRadioLinkFailure();
+            break;
+        }
+        }
         break;
     }
     case NtsMessageType::UE_NAS_TO_NAS: {
         auto *w = dynamic_cast<NwUeNasToNas *>(msg);
         switch (w->present)
         {
-        case NwUeNasToNas::PERFORM_MM_CYCLE: {
-            mm->handleNasEvent(*w);
+        case NwUeNasToNas::PERFORM_MM_CYCLE:
+            mm->performMmCycle();
             break;
-        }
-        case NwUeNasToNas::NAS_TIMER_EXPIRE: {
-            if (w->timer->isMmTimer())
-                mm->handleNasEvent(*w);
-            else
-                sm->handleNasEvent(*w);
+        case NwUeNasToNas::NAS_TIMER_EXPIRE:
+            onTimerExpire(*w->timer);
             break;
-        }
-        case NwUeNasToNas::ESTABLISH_INITIAL_SESSIONS: {
+        case NwUeNasToNas::ESTABLISH_INITIAL_SESSIONS:
             sm->establishInitialSessions();
-            break;
-        }
-        default:
-            break;
-        }
-        break;
-    }
-    case NtsMessageType::UE_APP_TO_NAS: {
-        auto *w = dynamic_cast<NwUeAppToNas *>(msg);
-        switch (w->present)
-        {
-        case NwUeAppToNas::UPLINK_STATUS_CHANGE: {
-            sm->handleUplinkStatusChange(w->psi, w->isPending);
-            break;
-        }
-        default:
             break;
         }
         break;
@@ -108,7 +116,7 @@ void NasTask::onLoop()
         if (timerId == NTS_TIMER_ID_MM_CYCLE)
         {
             setTimer(NTS_TIMER_ID_MM_CYCLE, NTS_TIMER_INTERVAL_MM_CYCLE);
-            mm->handleNasEvent(NwUeNasToNas{NwUeNasToNas::PERFORM_MM_CYCLE});
+            mm->performMmCycle();
         }
         break;
     }
@@ -120,9 +128,21 @@ void NasTask::onLoop()
     delete msg;
 }
 
+void NasTask::onTimerExpire(nas::NasTimer &timer)
+{
+    if (timer.isMmTimer())
+        mm->onTimerExpire(timer);
+    else
+    {
+        // TODO
+    }
+}
+
 void NasTask::performTick()
 {
     auto sendExpireMsg = [this](nas::NasTimer *timer) {
+        logger->debug("NAS timer[%d] expired [%d]", timer->getCode(), timer->getExpiryCount());
+
         auto *nw = new NwUeNasToNas(NwUeNasToNas::NAS_TIMER_EXPIRE);
         nw->timer = timer;
         push(nw);
@@ -158,12 +178,18 @@ void NasTask::performTick()
         sendExpireMsg(&timers.t3525);
     if (timers.t3540.performTick())
         sendExpireMsg(&timers.t3540);
+    if (timers.t3580.performTick())
+        sendExpireMsg(&timers.t3580);
+    if (timers.t3581.performTick())
+        sendExpireMsg(&timers.t3581);
+    if (timers.t3582.performTick())
+        sendExpireMsg(&timers.t3582);
+    if (timers.t3583.performTick())
+        sendExpireMsg(&timers.t3583);
     if (timers.t3584.performTick())
         sendExpireMsg(&timers.t3584);
     if (timers.t3585.performTick())
         sendExpireMsg(&timers.t3585);
-
-    sm->onTimerTick();
 }
 
 } // namespace nr::ue

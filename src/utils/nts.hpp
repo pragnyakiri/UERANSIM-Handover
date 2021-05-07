@@ -9,7 +9,6 @@
 #pragma once
 
 #include "scoped_thread.hpp"
-
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -35,26 +34,27 @@ enum class NtsMessageType
     UDP_SERVER_RECEIVE,
     CLI_SEND_RESPONSE,
 
-    GNB_RLS_TO_RRC,
-    GNB_RLS_TO_GTP,
-    GNB_GTP_TO_RLS,
-    GNB_RRC_TO_RLS,
+    GNB_MR_TO_MR,
+    GNB_MR_TO_RRC,
+    GNB_RRC_TO_MR,
     GNB_NGAP_TO_RRC,
     GNB_RRC_TO_NGAP,
     GNB_NGAP_TO_GTP,
+    GNB_MR_TO_GTP,
+    GNB_GTP_TO_MR,
     GNB_SCTP,
 
-    UE_APP_TO_RLS,
+    UE_MR_TO_MR,
+    UE_MR_TO_RRC,
+    UE_MR_TO_APP,
+    UE_APP_TO_MR,
     UE_APP_TO_TUN,
-    UE_APP_TO_NAS,
     UE_TUN_TO_APP,
     UE_RRC_TO_NAS,
     UE_NAS_TO_RRC,
-    UE_RRC_TO_RLS,
-    UE_NAS_TO_NAS,
-    UE_RLS_TO_RRC,
-    UE_RLS_TO_APP,
-    UE_NAS_TO_APP,
+    UE_RRC_TO_MR,
+	UE_NAS_TO_NAS,
+	UE_NAS_TO_APP,
 };
 
 struct NtsMessage
@@ -107,7 +107,6 @@ class TimerBase
 };
 
 // TODO: Limit queue size?
-// todo: message priority, especially control plane messages should have more priorty in appTask etc
 class NtsTask
 {
   private:

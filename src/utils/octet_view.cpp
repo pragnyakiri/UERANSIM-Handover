@@ -24,11 +24,6 @@ OctetString OctetView::readOctetString(int length) const
     return OctetString(std::move(v));
 }
 
-OctetString OctetView::readOctetString(size_t length) const
-{
-    return readOctetString(static_cast<int>(length));
-}
-
 OctetString OctetView::readOctetString() const
 {
     return readOctetString(static_cast<int>(size - index));
@@ -39,9 +34,4 @@ std::string OctetView::readUtf8String(int length) const
     auto res = std::string(data + index, data + index + length);
     index += length;
     return res;
-}
-
-std::string OctetView::readUtf8String(size_t length) const
-{
-    return readUtf8String(static_cast<int>(length));
 }

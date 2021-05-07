@@ -9,10 +9,8 @@
 #pragma once
 
 #include "octet_string.hpp"
-
 #include <cstdint>
 #include <string>
-
 #include <sys/socket.h>
 
 struct InetAddress

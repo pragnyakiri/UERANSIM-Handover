@@ -29,7 +29,6 @@ class UeAppTask : public NtsTask
 
     std::array<std::optional<UePduSessionInfo>, 16> m_pduSessions{};
     std::array<TunTask *, 16> m_tunTasks{};
-    ECmState m_cmState{};
 
     friend class UeCmdHandler;
 
@@ -45,7 +44,6 @@ class UeAppTask : public NtsTask
   private:
     void receiveStatusUpdate(NwUeStatusUpdate &msg);
     void setupTunInterface(const PduSession *pduSession);
-    void handleUplinkDataRequest(int psi, OctetString &&data);
 };
 
 } // namespace nr::ue

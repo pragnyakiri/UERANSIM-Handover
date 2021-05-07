@@ -7,7 +7,6 @@
 //
 
 #include "printer.hpp"
-
 #include <utils/common.hpp>
 
 void Printer::appendKeyValue(const std::string &key, const std::string &value)

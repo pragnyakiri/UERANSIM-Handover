@@ -9,8 +9,6 @@
 #include "scoped_thread.hpp"
 
 #include <iostream>
-#include <stdexcept>
-
 #include <pthread.h>
 
 struct Arguments

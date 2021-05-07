@@ -8,98 +8,61 @@
 
 #pragma once
 
-#include "types.hpp"
-
+#include <app/cli_base.hpp>
+#include <app/cli_cmd.hpp>
+#include <rrc/rrc.hpp>
+#include <sctp/sctp.hpp>
+#include <urs/rls/rls.hpp>
 #include <utility>
-
-#include <lib/app/cli_base.hpp>
-#include <lib/app/cli_cmd.hpp>
-#include <lib/asn/utils.hpp>
-#include <lib/rrc/rrc.hpp>
-#include <lib/sctp/sctp.hpp>
 #include <utils/network.hpp>
 #include <utils/nts.hpp>
 #include <utils/octet_string.hpp>
 #include <utils/unique_buffer.hpp>
 
-extern "C"
-{
-    struct ASN_NGAP_FiveG_S_TMSI;
-    struct ASN_NGAP_TAIListForPaging;
-}
+#include "types.hpp"
 
 namespace nr::gnb
 {
 
-struct NwGnbRlsToRrc : NtsMessage
+struct NwGnbMrToRrc : NtsMessage
 {
     enum PR
     {
         RRC_PDU_DELIVERY,
-        SIGNAL_LOST
+        RADIO_LINK_FAILURE,
     } present;
 
     // RRC_PDU_DELIVERY
-    // SIGNAL_LOST
+    // RADIO_LINK_FAILURE
     int ueId{};
 
     // RRC_PDU_DELIVERY
     rrc::RrcChannel channel{};
     OctetString pdu{};
 
-    explicit NwGnbRlsToRrc(PR present) : NtsMessage(NtsMessageType::GNB_RLS_TO_RRC), present(present)
+    explicit NwGnbMrToRrc(PR present) : NtsMessage(NtsMessageType::GNB_MR_TO_RRC), present(present)
     {
     }
 };
 
-struct NwGnbRlsToGtp : NtsMessage
+struct NwGnbRrcToMr : NtsMessage
 {
     enum PR
     {
-        DATA_PDU_DELIVERY,
-    } present;
-
-    // DATA_PDU_DELIVERY
-    int ueId{};
-    int psi{};
-    OctetString pdu{};
-
-    explicit NwGnbRlsToGtp(PR present) : NtsMessage(NtsMessageType::GNB_RLS_TO_GTP), present(present)
-    {
-    }
-};
-
-struct NwGnbGtpToRls : NtsMessage
-{
-    enum PR
-    {
-        DATA_PDU_DELIVERY,
-    } present;
-
-    // DATA_PDU_DELIVERY
-    int ueId{};
-    int psi{};
-    OctetString pdu{};
-
-    explicit NwGnbGtpToRls(PR present) : NtsMessage(NtsMessageType::GNB_GTP_TO_RLS), present(present)
-    {
-    }
-};
-
-struct NwGnbRrcToRls : NtsMessage
-{
-    enum PR
-    {
-        RADIO_POWER_ON,
+        NGAP_LAYER_INITIALIZED,
         RRC_PDU_DELIVERY,
+        AN_RELEASE,
     } present;
 
     // RRC_PDU_DELIVERY
+    // AN_RELEASE
     int ueId{};
+
+    // RRC_PDU_DELIVERY
     rrc::RrcChannel channel{};
     OctetString pdu{};
 
-    explicit NwGnbRrcToRls(PR present) : NtsMessage(NtsMessageType::GNB_RRC_TO_RLS), present(present)
+    explicit NwGnbRrcToMr(PR present) : NtsMessage(NtsMessageType::GNB_RRC_TO_MR), present(present)
     {
     }
 };
@@ -108,10 +71,9 @@ struct NwGnbNgapToRrc : NtsMessage
 {
     enum PR
     {
-        RADIO_POWER_ON,
+        NGAP_LAYER_INITIALIZED,
         NAS_DELIVERY,
         AN_RELEASE,
-        PAGING,
     } present;
 
     // NAS_DELIVERY
@@ -120,10 +82,6 @@ struct NwGnbNgapToRrc : NtsMessage
 
     // NAS_DELIVERY
     OctetString pdu{};
-
-    // PAGING
-    asn::Unique<ASN_NGAP_FiveG_S_TMSI> uePagingTmsi{};
-    asn::Unique<ASN_NGAP_TAIListForPaging> taiListForPaging{};
 
     explicit NwGnbNgapToRrc(PR present) : NtsMessage(NtsMessageType::GNB_NGAP_TO_RRC), present(present)
     {
@@ -161,9 +119,8 @@ struct NwGnbNgapToGtp : NtsMessage
     enum PR
     {
         UE_CONTEXT_UPDATE,
-        UE_CONTEXT_RELEASE,
         SESSION_CREATE,
-        SESSION_RELEASE,
+        UE_CONTEXT_RELEASE,
     } present;
 
     // UE_CONTEXT_UPDATE
@@ -173,13 +130,76 @@ struct NwGnbNgapToGtp : NtsMessage
     PduSessionResource *resource{};
 
     // UE_CONTEXT_RELEASE
-    // SESSION_RELEASE
     int ueId{};
 
-    // SESSION_RELEASE
-    int psi{};
-
     explicit NwGnbNgapToGtp(PR present) : NtsMessage(NtsMessageType::GNB_NGAP_TO_GTP), present(present)
+    {
+    }
+};
+
+struct NwGnbMrToGtp : NtsMessage
+{
+    enum PR
+    {
+        UPLINK_DELIVERY,
+    } present;
+
+    // UPLINK_DELIVERY
+    int ueId{};
+    int pduSessionId{};
+    OctetString data{};
+
+    explicit NwGnbMrToGtp(PR present) : NtsMessage(NtsMessageType::GNB_MR_TO_GTP), present(present)
+    {
+    }
+};
+
+struct NwGnbGtpToMr : NtsMessage
+{
+    enum PR
+    {
+        DATA_PDU_DELIVERY,
+    } present;
+
+    // DATA_PDU_DELIVERY
+    int ueId{};
+    int pduSessionId{};
+    OctetString data{};
+
+    explicit NwGnbGtpToMr(PR present) : NtsMessage(NtsMessageType::GNB_GTP_TO_MR), present(present)
+    {
+    }
+};
+
+struct NwGnbMrToMr : NtsMessage
+{
+    enum PR
+    {
+        UE_CONNECTED,
+        UE_RELEASED,
+        SEND_OVER_UDP,
+        RECEIVE_OVER_UDP,
+    } present;
+
+    // UE_CONNECTED
+    // UE_RELEASED
+    // RECEIVE_OVER_UDP
+    int ue{};
+
+    // UE_CONNECTED
+    std::string name{};
+
+    // UE_RELEASED
+    rls::ECause cause{};
+
+    // SEND_OVER_RLS
+    InetAddress address{};
+    OctetString pdu{};
+
+    // RECEIVE_OVER_UDP
+    rls::EPayloadType type{};
+
+    explicit NwGnbMrToMr(PR present) : NtsMessage(NtsMessageType::GNB_MR_TO_MR), present(present)
     {
     }
 };

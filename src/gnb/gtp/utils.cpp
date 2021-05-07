@@ -7,7 +7,6 @@
 //
 
 #include "utils.hpp"
-
 #include <utils/common.hpp>
 
 namespace nr::gnb
@@ -78,16 +77,16 @@ TokenBucket::TokenBucket(long byteCapacity) : byteCapacity(byteCapacity)
     }
 }
 
-bool TokenBucket::tryConsume(uint64_t numberOfTokens)
+bool TokenBucket::tryConsume(int64_t numberTokens)
 {
     if (byteCapacity > 0)
     {
         refill();
-        if (availableTokens < static_cast<double>(numberOfTokens))
+        if (availableTokens < numberTokens)
             return false;
         else
         {
-            availableTokens -= static_cast<double>(numberOfTokens);
+            availableTokens -= numberTokens;
             return true;
         }
     }
@@ -95,7 +94,7 @@ bool TokenBucket::tryConsume(uint64_t numberOfTokens)
         return true;
 }
 
-void TokenBucket::updateCapacity(uint64_t newByteCapacity)
+void TokenBucket::updateCapacity(int64_t newByteCapacity)
 {
     byteCapacity = newByteCapacity;
     if (newByteCapacity > 0)
@@ -108,13 +107,13 @@ void TokenBucket::refill()
     if (currentTimeMillis > lastRefillTimestamp)
     {
         int64_t millisSinceLastRefill = currentTimeMillis - lastRefillTimestamp;
-        double refill = static_cast<double>(millisSinceLastRefill) * refillTokensPerOneMillis;
+        double refill = millisSinceLastRefill * refillTokensPerOneMillis;
         availableTokens = std::min(static_cast<double>(byteCapacity), availableTokens + refill);
         lastRefillTimestamp = currentTimeMillis;
     }
 }
 
-bool RateLimiter::allowDownlinkPacket(uint64_t pduSession, uint64_t packetSize)
+bool RateLimiter::allowDownlinkPacket(uint64_t pduSession, int64_t packetSize)
 {
     int ueId = GetUeId(pduSession);
 
@@ -135,7 +134,7 @@ bool RateLimiter::allowDownlinkPacket(uint64_t pduSession, uint64_t packetSize)
     return true;
 }
 
-bool RateLimiter::allowUplinkPacket(uint64_t pduSession, uint64_t packetSize)
+bool RateLimiter::allowUplinkPacket(uint64_t pduSession, int64_t packetSize)
 {
     int ueId = GetUeId(pduSession);
 
@@ -156,7 +155,7 @@ bool RateLimiter::allowUplinkPacket(uint64_t pduSession, uint64_t packetSize)
     return true;
 }
 
-void RateLimiter::updateUeUplinkLimit(int ueId, uint64_t limit)
+void RateLimiter::updateUeUplinkLimit(int ueId, int64_t limit)
 {
     if (limit <= 0)
     {
@@ -175,7 +174,7 @@ void RateLimiter::updateUeUplinkLimit(int ueId, uint64_t limit)
     }
 }
 
-void RateLimiter::updateUeDownlinkLimit(int ueId, uint64_t limit)
+void RateLimiter::updateUeDownlinkLimit(int ueId, int64_t limit)
 {
     if (limit <= 0)
     {
@@ -194,7 +193,7 @@ void RateLimiter::updateUeDownlinkLimit(int ueId, uint64_t limit)
     }
 }
 
-void RateLimiter::updateSessionUplinkLimit(uint64_t pduSession, uint64_t limit)
+void RateLimiter::updateSessionUplinkLimit(uint64_t pduSession, int64_t limit)
 {
     if (limit <= 0)
     {
@@ -213,7 +212,7 @@ void RateLimiter::updateSessionUplinkLimit(uint64_t pduSession, uint64_t limit)
     }
 }
 
-void RateLimiter::updateSessionDownlinkLimit(uint64_t pduSession, uint64_t limit)
+void RateLimiter::updateSessionDownlinkLimit(uint64_t pduSession, int64_t limit)
 {
     if (limit <= 0)
     {

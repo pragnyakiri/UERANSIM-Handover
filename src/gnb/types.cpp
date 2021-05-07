@@ -6,9 +6,10 @@
 // and subject to the terms and conditions defined in LICENSE file.
 //
 
-#include <sstream>
-
 #include <gnb/types.hpp>
+#include <iomanip>
+#include <sstream>
+#include <utils/printer.hpp>
 
 namespace nr::gnb
 {
@@ -25,7 +26,7 @@ Json ToJson(const GnbConfig &v)
         {"nci", v.nci},
         {"plmn", ToJson(v.plmn)},
         {"tac", v.tac},
-        {"nssai", ToJson(v.nssai)},
+        {"nssai", ToJson(v.nssais)},
         {"ngap-ip", v.ngapIp},
         {"gtp-ip", v.gtpIp},
         {"paging-drx", ToJson(v.pagingDrx)},

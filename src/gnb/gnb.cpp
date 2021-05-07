@@ -9,12 +9,13 @@
 #include "gnb.hpp"
 #include "app/task.hpp"
 #include "gtp/task.hpp"
+#include "mr/task.hpp"
 #include "ngap/task.hpp"
-#include "rls/task.hpp"
 #include "rrc/task.hpp"
 #include "sctp/task.hpp"
 
-#include <lib/app/cli_base.hpp>
+#include <app/cli_base.hpp>
+#include <utils/common.hpp>
 
 namespace nr::gnb
 {
@@ -32,7 +33,7 @@ GNodeB::GNodeB(GnbConfig *config, app::INodeListener *nodeListener, NtsTask *cli
     base->ngapTask = new NgapTask(base);
     base->rrcTask = new GnbRrcTask(base);
     base->gtpTask = new GtpTask(base);
-    base->rlsTask = new GnbRlsTask(base);
+    base->mrTask = new GnbMrTask(base);
 
     taskBase = base;
 }
@@ -44,14 +45,14 @@ GNodeB::~GNodeB()
     taskBase->ngapTask->quit();
     taskBase->rrcTask->quit();
     taskBase->gtpTask->quit();
-    taskBase->rlsTask->quit();
+    taskBase->mrTask->quit();
 
     delete taskBase->appTask;
     delete taskBase->sctpTask;
     delete taskBase->ngapTask;
     delete taskBase->rrcTask;
     delete taskBase->gtpTask;
-    delete taskBase->rlsTask;
+    delete taskBase->mrTask;
 
     delete taskBase->logBase;
 
@@ -64,7 +65,7 @@ void GNodeB::start()
     taskBase->sctpTask->start();
     taskBase->ngapTask->start();
     taskBase->rrcTask->start();
-    taskBase->rlsTask->start();
+    taskBase->mrTask->start();
     taskBase->gtpTask->start();
 }
 

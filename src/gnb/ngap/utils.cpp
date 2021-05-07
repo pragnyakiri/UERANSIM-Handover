@@ -86,13 +86,13 @@ void GuamiFromAsn_Ref(const ASN_NGAP_GUAMI_t &guami, Guami &target)
     PlmnFromAsn_Ref(guami.pLMNIdentity, target.plmn);
 }
 
-SingleSlice SliceSupportFromAsn(ASN_NGAP_SliceSupportItem &supportItem)
+std::unique_ptr<SliceSupport> SliceSupportFromAsn_Unique(ASN_NGAP_SliceSupportItem &supportItem)
 {
-    SingleSlice s{};
-    s.sst = asn::GetOctet1(supportItem.s_NSSAI.sST);
-    s.sd = std::nullopt;
+    auto s = std::make_unique<SliceSupport>();
+    s->sst = asn::GetOctet1(supportItem.s_NSSAI.sST);
+    s->sd = std::nullopt;
     if (supportItem.s_NSSAI.sD)
-        s.sd = asn::GetOctet3(*supportItem.s_NSSAI.sD);
+        s->sd = asn::GetOctet3(*supportItem.s_NSSAI.sD);
     return s;
 }
 

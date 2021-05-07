@@ -9,11 +9,9 @@
 #pragma once
 
 #include "nts.hpp"
-
 #include <memory>
-#include <vector>
-
 #include <spdlog/fwd.h>
+#include <vector>
 
 enum class Severity
 {

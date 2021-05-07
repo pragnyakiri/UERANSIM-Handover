@@ -9,16 +9,14 @@
 #pragma once
 
 #include "utils.hpp"
-
+#include <gnb/nts.hpp>
 #include <memory>
 #include <thread>
+#include <udp/server_task.hpp>
 #include <unordered_map>
-#include <vector>
-
-#include <gnb/nts.hpp>
-#include <lib/udp/server_task.hpp>
 #include <utils/logger.hpp>
 #include <utils/nts.hpp>
+#include <vector>
 
 namespace nr::gnb
 {
@@ -50,7 +48,6 @@ class GtpTask : public NtsTask
     void handleUdpReceive(const udp::NwUdpServerReceive &msg);
     void handleUeContextUpdate(const GtpUeContextUpdate &msg);
     void handleSessionCreate(PduSessionResource *session);
-    void handleSessionRelease(int ueId, int psi);
     void handleUeContextDelete(int ueId);
     void handleUplinkData(int ueId, int psi, OctetString &&data);
 

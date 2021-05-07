@@ -7,12 +7,8 @@
 //
 
 #include "common_types.hpp"
-#include "common.hpp"
-
-#include <algorithm>
 #include <iomanip>
 #include <sstream>
-#include <stdexcept>
 
 Supi Supi::Parse(const std::string &supi)
 {
@@ -42,84 +38,12 @@ Json ToJson(const Plmn &v)
     return ss.str();
 }
 
-Json ToJson(const SingleSlice &v)
+Json ToJson(const SliceSupport &v)
 {
     return Json::Obj({{"sst", ToJson(v.sst)}, {"sd", ToJson(v.sd)}});
-}
-
-Json ToJson(const NetworkSlice &v)
-{
-    return ToJson(v.slices);
 }
 
 Json ToJson(const PlmnSupport &v)
 {
     return Json::Obj({{"plmn", ToJson(v.plmn)}, {"nssai", ToJson(v.sliceSupportList)}});
-}
-
-Json ToJson(const EDeregCause &v)
-{
-    switch (v)
-    {
-    case EDeregCause::UNSPECIFIED:
-        return "NORMAL";
-    case EDeregCause::SWITCH_OFF:
-        return "SWITCH-OFF";
-    case EDeregCause::USIM_REMOVAL:
-        return "USIM-REMOVAL";
-    case EDeregCause::DISABLE_5G:
-        return "DISABLE-5G";
-    case EDeregCause::ECALL_INACTIVITY:
-        return "ECALL-INACTIVITY";
-    default:
-        return "?";
-    }
-}
-
-bool operator==(const SingleSlice &lhs, const SingleSlice &rhs)
-{
-    if ((int)lhs.sst != (int)rhs.sst)
-        return false;
-    if (lhs.sd.has_value() != rhs.sd.has_value())
-        return false;
-    if (!lhs.sd.has_value())
-        return true;
-    return ((int)*lhs.sd) == ((int)*rhs.sd);
-}
-
-bool operator==(const Plmn &lhs, const Plmn &rhs)
-{
-    if (lhs.mcc != rhs.mcc)
-        return false;
-    if (lhs.mnc != rhs.mnc)
-        return false;
-    return lhs.isLongMnc == rhs.isLongMnc;
-}
-
-bool operator==(const GlobalNci &lhs, const GlobalNci &rhs)
-{
-    return lhs.plmn == rhs.plmn && lhs.nci == rhs.nci;
-}
-
-void NetworkSlice::addIfNotExists(const SingleSlice &slice)
-{
-    if (!std::any_of(slices.begin(), slices.end(), [&slice](auto &s) { return s == slice; }))
-        slices.push_back(slice);
-}
-
-std::size_t std::hash<Plmn>::operator()(const Plmn &v) const noexcept
-{
-    std::size_t h = 0;
-    utils::HashCombine(h, v.mcc);
-    utils::HashCombine(h, v.mnc);
-    utils::HashCombine(h, v.isLongMnc);
-    return h;
-}
-
-std::size_t std::hash<GlobalNci>::operator()(const GlobalNci &v) const noexcept
-{
-    std::size_t h = 0;
-    utils::HashCombine(h, v.plmn);
-    utils::HashCombine(h, v.nci);
-    return h;
 }

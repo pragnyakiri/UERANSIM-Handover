@@ -10,7 +10,6 @@
 #include "utils.hpp"
 
 #include <algorithm>
-
 #include <gnb/app/task.hpp>
 #include <gnb/rrc/task.hpp>
 #include <gnb/sctp/task.hpp>
@@ -24,12 +23,13 @@
 #include <asn/ngap/ASN_NGAP_InitiatingMessage.h>
 #include <asn/ngap/ASN_NGAP_NGAP-PDU.h>
 #include <asn/ngap/ASN_NGAP_NGSetupRequest.h>
-#include <asn/ngap/ASN_NGAP_OverloadStartNSSAIItem.h>
+#include <asn/ngap/ASN_NGAP_PathSwitchRequest.h>
 #include <asn/ngap/ASN_NGAP_PLMNSupportItem.h>
 #include <asn/ngap/ASN_NGAP_ProtocolIE-Field.h>
 #include <asn/ngap/ASN_NGAP_ServedGUAMIItem.h>
 #include <asn/ngap/ASN_NGAP_SliceSupportItem.h>
 #include <asn/ngap/ASN_NGAP_SupportedTAItem.h>
+#include <asn/ngap/ASN_NGAP_OverloadStartNSSAIItem.h>
 
 namespace nr::gnb
 {
@@ -68,7 +68,7 @@ static void AssignDefaultAmfConfigs(NgapAmfContext *amf, T *msg)
             auto plmnSupport = new PlmnSupport();
             ngap_utils::PlmnFromAsn_Ref(item.pLMNIdentity, plmnSupport->plmn);
             asn::ForeachItem(item.sliceSupportList, [plmnSupport](ASN_NGAP_SliceSupportItem &ssItem) {
-                plmnSupport->sliceSupportList.slices.push_back(ngap_utils::SliceSupportFromAsn(ssItem));
+                plmnSupport->sliceSupportList.push_back(ngap_utils::SliceSupportFromAsn_Unique(ssItem));
             });
             amf->plmnSupportList.push_back(plmnSupport);
         });
@@ -108,7 +108,7 @@ void NgapTask::handleAssociationShutdown(int amfId)
 
 void NgapTask::sendNgSetupRequest(int amfId)
 {
-    m_logger->debug("Sending NG Setup Request");
+    m_logger->debug("Sending NG Setup Request: amfId = %d", amfId);
 
     auto *amf = findAmfContext(amfId);
     if (amf == nullptr)
@@ -140,7 +140,7 @@ void NgapTask::sendNgSetupRequest(int amfId)
 
     auto *broadcastPlmn = asn::New<ASN_NGAP_BroadcastPLMNItem>();
     asn::SetOctetString3(broadcastPlmn->pLMNIdentity, ngap_utils::PlmnToOctet3(m_base->config->plmn));
-    for (auto &nssai : m_base->config->nssai.slices)
+    for (auto &nssai : m_base->config->nssais)
     {
         auto *item = asn::New<ASN_NGAP_SliceSupportItem>();
         asn::SetOctetString1(item->s_NSSAI.sST, static_cast<uint8_t>(nssai.sst));
@@ -196,7 +196,7 @@ void NgapTask::receiveNgSetupResponse(int amfId, ASN_NGAP_NGSetupResponse *msg)
         update->isNgapUp = true;
         m_base->appTask->push(update);
 
-        m_base->rrcTask->push(new NwGnbNgapToRrc(NwGnbNgapToRrc::RADIO_POWER_ON));
+        m_base->rrcTask->push(new NwGnbNgapToRrc(NwGnbNgapToRrc::NGAP_LAYER_INITIALIZED));
     }
 }
 
@@ -239,8 +239,8 @@ void NgapTask::sendErrorIndication(int amfId, NgapCause cause, int ueId)
     ieCause->value.present = ASN_NGAP_ErrorIndicationIEs__value_PR_Cause;
     ngap_utils::ToCauseAsn_Ref(cause, ieCause->value.choice.Cause);
 
-    m_logger->warn("Sending an error indication with cause: %s",
-                   ngap_utils::CauseToString(ieCause->value.choice.Cause).c_str());
+    m_logger->debug("Sending an error indication with cause: %s",
+                    ngap_utils::CauseToString(ieCause->value.choice.Cause).c_str());
 
     auto *pdu = asn::ngap::NewMessagePdu<ASN_NGAP_ErrorIndication>({ieCause});
 
@@ -248,6 +248,140 @@ void NgapTask::sendErrorIndication(int amfId, NgapCause cause, int ueId)
         sendNgapUeAssociated(ueId, pdu);
     else
         sendNgapNonUe(amfId, pdu);
+}
+
+void NgapTask::handleXnHandover(int ueId, ASN_NGAP_NGAP_PDU *pdu)
+{
+  /*pradnya's code*/
+    /* 
+    int ueId = 3;
+    m_logger->debug("handle Xn handover : %d", ueId);
+
+    auto *ueCtx = findUeContext(ueId);
+    if (ueCtx == nullptr)
+        return;
+
+    auto *amfCtx = findAmfContext(ueCtx->associatedAmfId);
+    if (amfCtx == nullptr)
+        return;
+    
+    m_logger->debug("AmfId : %d", ueCtx->associatedAmfId);
+
+    auto *ieRanUeNgapId = asn::New<ASN_NGAP_PathSwitchRequestIEs>();
+    ieRanUeNgapId->id = ASN_NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID;
+    ieRanUeNgapId->criticality = ASN_NGAP_Criticality_reject;
+    ieRanUeNgapId->value.present = ASN_NGAP_PathSwitchRequestIEs__value_PR_RAN_UE_NGAP_ID;
+    ieRanUeNgapId->value.choice.RAN_UE_NGAP_ID = (unsigned long) ueCtx->ranUeNgapId; // RHS returns int64_t and LHS is unsigned long 
+    
+    auto *ieAmfUeNgapId = asn::New<ASN_NGAP_PathSwitchRequestIEs>();
+    ieAmfUeNgapId->id = ASN_NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID;
+    ieAmfUeNgapId->criticality = ASN_NGAP_Criticality_reject;
+    ieAmfUeNgapId->value.present = ASN_NGAP_PathSwitchRequestIEs__value_PR_AMF_UE_NGAP_ID;
+    ieAmfUeNgapId->value.choice.AMF_UE_NGAP_ID =  asn::GetInteger_t (ueCtx->amfUeNgapId); // RHS returns int64_t and LHS is INTEGER_t (ASN_Primitive_Type_t - which is of type struct)
+    
+    m_logger->debug("Integer_t: amfuengapid = %d", asn::GetInteger_t (ueCtx->amfUeNgapId));*/
+ /*end of pradnya's code*/
+ /* Find UE and AMF contexts */
+
+    auto *ue = findUeContext(ueId);
+    if (ue == nullptr)
+    {
+        asn::Free(asn_DEF_ASN_NGAP_NGAP_PDU, pdu);
+        return;
+    }
+
+    auto *amf = findAmfContext(ue->associatedAmfId);
+    if (amf == nullptr)
+    {
+        asn::Free(asn_DEF_ASN_NGAP_NGAP_PDU, pdu);
+        return;
+    }
+
+    /* Insert UE-related information elements */
+    {
+        if (ue->amfUeNgapId > 0)
+        {
+            asn::ngap::AddProtocolIeIfUsable(*pdu, asn_DEF_ASN_NGAP_AMF_UE_NGAP_ID,
+                                             ASN_NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, ASN_NGAP_Criticality_reject,
+                                             [ue](void *mem) {
+                                                 auto &id = *reinterpret_cast<ASN_NGAP_AMF_UE_NGAP_ID_t *>(mem);
+                                                 asn::SetSigned64(ue->amfUeNgapId, id);
+                                             });
+        }
+
+        asn::ngap::AddProtocolIeIfUsable(
+            *pdu, asn_DEF_ASN_NGAP_RAN_UE_NGAP_ID, ASN_NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+            ASN_NGAP_Criticality_reject,
+            [ue](void *mem) { *reinterpret_cast<ASN_NGAP_RAN_UE_NGAP_ID_t *>(mem) = ue->ranUeNgapId; });
+
+        asn::ngap::AddProtocolIeIfUsable(
+            *pdu, asn_DEF_ASN_NGAP_UserLocationInformation, ASN_NGAP_ProtocolIE_ID_id_UserLocationInformation,
+            ASN_NGAP_Criticality_ignore, [this](void *mem) {
+                auto *loc = reinterpret_cast<ASN_NGAP_UserLocationInformation *>(mem);
+                loc->present = ASN_NGAP_UserLocationInformation_PR_userLocationInformationNR;
+                loc->choice.userLocationInformationNR = asn::New<ASN_NGAP_UserLocationInformationNR>();
+
+                auto &nr = loc->choice.userLocationInformationNR;
+                nr->timeStamp = asn::New<ASN_NGAP_TimeStamp_t>();
+
+                ngap_utils::ToPlmnAsn_Ref(m_base->config->plmn, nr->nR_CGI.pLMNIdentity);
+                asn::SetBitStringLong<36>(m_base->config->nci, nr->nR_CGI.nRCellIdentity);
+                ngap_utils::ToPlmnAsn_Ref(m_base->config->plmn, nr->tAI.pLMNIdentity);
+                asn::SetOctetString3(nr->tAI.tAC, octet3{m_base->config->tac});
+                asn::SetOctetString4(*nr->timeStamp, octet4{utils::CurrentTimeStamp().seconds32()});
+            });
+    }
+/* // UE Security Capabilities */
+    {
+        asn::ngap::AddProtocolIeIfUsable(
+            *pdu, asn_DEF_ASN_NGAP_RAN_UE_NGAP_ID, ASN_NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
+            ASN_NGAP_Criticality_reject,
+            [ue](void *mem) { *reinterpret_cast<ASN_NGAP_RAN_UE_NGAP_ID_t *>(mem) = ue->ranUeNgapId; });
+
+        asn::ngap::AddProtocolIeIfUsable(
+            *pdu, asn_DEF_ASN_NGAP_UserLocationInformation, ASN_NGAP_ProtocolIE_ID_id_UserLocationInformation,
+            ASN_NGAP_Criticality_ignore, [this](void *mem) {
+                auto *loc = reinterpret_cast<ASN_NGAP_UserLocationInformation *>(mem);
+                loc->present = ASN_NGAP_UserLocationInformation_PR_userLocationInformationNR;
+                loc->choice.userLocationInformationNR = asn::New<ASN_NGAP_UserLocationInformationNR>();
+
+                auto &nr = loc->choice.userLocationInformationNR;
+                nr->timeStamp = asn::New<ASN_NGAP_TimeStamp_t>();
+
+                ngap_utils::ToPlmnAsn_Ref(m_base->config->plmn, nr->nR_CGI.pLMNIdentity);
+                asn::SetBitStringLong<36>(m_base->config->nci, nr->nR_CGI.nRCellIdentity);
+                ngap_utils::ToPlmnAsn_Ref(m_base->config->plmn, nr->tAI.pLMNIdentity);
+                asn::SetOctetString3(nr->tAI.tAC, octet3{m_base->config->tac});
+                asn::SetOctetString4(*nr->timeStamp, octet4{utils::CurrentTimeStamp().seconds32()});
+            });
+    }
+  /*  auto *ieUserLocInfo = asn::New<ASN_NGAP_PathSwitchRequestIEs>();
+    ieUserLocInfo->id = ASN_NGAP_ProtocolIE_ID_id_UserLocationInformation;
+    ieUserLocInfo->criticality = ASN_NGAP_Criticality_ignore;
+    ieUserLocInfo->value.present = ASN_NGAP_PathSwitchRequestIEs__value_PR_UserLocationInformation;
+    ieUserLocInfo->value.choice.UserLocationInformation.present = ASN_NGAP_GlobalRANNodeID_PR_globalGNB_ID;
+    ieUserLocInfo->value.choice.UserLocationInformation.choice.userLocationInformationNR = globalGnbId;
+
+    //ieUserLocInfo->value.choice.UserLocationInformation = 
+    //asn::SetPrintableString(ieRanNodeName->value.choice.RANNodeName, m_base->config->name);
+
+    auto *ieUeSecCap = asn::New<ASN_NGAP_PathSwitchRequestIEs>();
+    ieUeSecCap->id = ASN_NGAP_ProtocolIE_ID_id_UESecurityCapabilities;
+    ieUeSecCap->criticality = ASN_NGAP_Criticality_ignore;
+    ieUeSecCap->value.present = ASN_NGAP_PathSwitchRequestIEs__value_PR_UESecurityCapabilities;
+    ieUeSecCap->value.choice.UESecurityCapabilities = ;//ngap_utils::PagingDrxToAsn(m_base->config->pagingDrx);
+
+    auto *iePduSessionResSw = asn::New<ASN_NGAP_PathSwitchRequestIEs>();
+    iePduSessionResSw->id = ASN_NGAP_ProtocolIE_ID_id_PDUSessionResourceToBeSwitchedDLList;
+    iePduSessionResSw->criticality = ASN_NGAP_Criticality_reject;
+    iePduSessionResSw->value.present = ASN_NGAP_PathSwitchRequestIEs__value_PR_PDUSessionResourceToBeSwitchedDLList;
+    iePduSessionResSw->value.choice.PDUSessionResourceToBeSwitchedDLList = ;//ngap_utils::PagingDrxToAsn(m_base->config->pagingDrx);
+
+    auto *pdu = asn::ngap::NewMessagePdu<ASN_NGAP_PathSwitchRequest>(
+        {ieRanUeNgapId, ieAmfUeNgapId, ieUserLocInfo, ieUeSecCap, iePduSessionResSw});
+*/
+    //sendNgapUeAssociated(ueId, pdu);
+   
 }
 
 void NgapTask::receiveAmfConfigurationUpdate(int amfId, ASN_NGAP_AMFConfigurationUpdate *msg)

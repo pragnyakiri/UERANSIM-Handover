@@ -7,13 +7,11 @@
 //
 
 #include "task.hpp"
-
-#include <gnb/nts.hpp>
-#include <gnb/rls/task.hpp>
-#include <lib/rrc/encode.hpp>
-
 #include <asn/rrc/ASN_RRC_DLInformationTransfer-IEs.h>
 #include <asn/rrc/ASN_RRC_DLInformationTransfer.h>
+#include <gnb/mr/task.hpp>
+#include <gnb/nts.hpp>
+#include <rrc/encode.hpp>
 
 namespace nr::gnb
 {
@@ -40,15 +38,15 @@ void GnbRrcTask::onLoop()
 
     switch (msg->msgType)
     {
-    case NtsMessageType::GNB_RLS_TO_RRC: {
-        auto *w = dynamic_cast<NwGnbRlsToRrc *>(msg);
+    case NtsMessageType::GNB_MR_TO_RRC: {
+        auto *w = dynamic_cast<NwGnbMrToRrc *>(msg);
         switch (w->present)
         {
-        case NwGnbRlsToRrc::RRC_PDU_DELIVERY: {
+        case NwGnbMrToRrc::RRC_PDU_DELIVERY: {
             handleUplinkRrc(w->ueId, w->channel, w->pdu);
             break;
         }
-        case NwGnbRlsToRrc::SIGNAL_LOST: {
+        case NwGnbMrToRrc::RADIO_LINK_FAILURE: {
             handleRadioLinkFailure(w->ueId);
             break;
         }
@@ -59,8 +57,8 @@ void GnbRrcTask::onLoop()
         auto *w = dynamic_cast<NwGnbNgapToRrc *>(msg);
         switch (w->present)
         {
-        case NwGnbNgapToRrc::RADIO_POWER_ON: {
-            m_base->rlsTask->push(new NwGnbRrcToRls(NwGnbRrcToRls::RADIO_POWER_ON));
+        case NwGnbNgapToRrc::NGAP_LAYER_INITIALIZED: {
+            m_base->mrTask->push(new NwGnbRrcToMr(NwGnbRrcToMr::NGAP_LAYER_INITIALIZED));
             break;
         }
         case NwGnbNgapToRrc::NAS_DELIVERY: {
@@ -71,9 +69,6 @@ void GnbRrcTask::onLoop()
             releaseConnection(w->ueId);
             break;
         }
-        case NwGnbNgapToRrc::PAGING:
-            handlePaging(w->uePagingTmsi, w->taiListForPaging);
-            break;
         }
         break;
     }
