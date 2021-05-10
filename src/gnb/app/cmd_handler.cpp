@@ -144,7 +144,7 @@ void GnbCmdHandler::handleCmdImpl(NwGnbCliCommand &msg)
         break;
     }
     case app::GnbCliCommand::HANDOVER: {
-        m_base->ngapTask->handleXnHandover(msg.cmd->UeId);
+        m_base->ngapTask->handleXnHandover();
         break;
     }
 }

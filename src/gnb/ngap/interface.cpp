@@ -250,10 +250,8 @@ void NgapTask::sendErrorIndication(int amfId, NgapCause cause, int ueId)
         sendNgapNonUe(amfId, pdu);
 }
 
-void NgapTask::handleXnHandover(int ueId, ASN_NGAP_NGAP_PDU *pdu)
+void NgapTask::handleXnHandover()
 {
-  /*pradnya's code*/
-    /* 
     int ueId = 3;
     m_logger->debug("handle Xn handover : %d", ueId);
 
@@ -279,82 +277,8 @@ void NgapTask::handleXnHandover(int ueId, ASN_NGAP_NGAP_PDU *pdu)
     ieAmfUeNgapId->value.present = ASN_NGAP_PathSwitchRequestIEs__value_PR_AMF_UE_NGAP_ID;
     ieAmfUeNgapId->value.choice.AMF_UE_NGAP_ID =  asn::GetInteger_t (ueCtx->amfUeNgapId); // RHS returns int64_t and LHS is INTEGER_t (ASN_Primitive_Type_t - which is of type struct)
     
-    m_logger->debug("Integer_t: amfuengapid = %d", asn::GetInteger_t (ueCtx->amfUeNgapId));*/
- /*end of pradnya's code*/
- /* Find UE and AMF contexts */
+    m_logger->debug("Integer_t: amfuengapid = %d", asn::GetInteger_t (ueCtx->amfUeNgapId));
 
-    auto *ue = findUeContext(ueId);
-    if (ue == nullptr)
-    {
-        asn::Free(asn_DEF_ASN_NGAP_NGAP_PDU, pdu);
-        return;
-    }
-
-    auto *amf = findAmfContext(ue->associatedAmfId);
-    if (amf == nullptr)
-    {
-        asn::Free(asn_DEF_ASN_NGAP_NGAP_PDU, pdu);
-        return;
-    }
-
-    /* Insert UE-related information elements */
-    {
-        if (ue->amfUeNgapId > 0)
-        {
-            asn::ngap::AddProtocolIeIfUsable(*pdu, asn_DEF_ASN_NGAP_AMF_UE_NGAP_ID,
-                                             ASN_NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, ASN_NGAP_Criticality_reject,
-                                             [ue](void *mem) {
-                                                 auto &id = *reinterpret_cast<ASN_NGAP_AMF_UE_NGAP_ID_t *>(mem);
-                                                 asn::SetSigned64(ue->amfUeNgapId, id);
-                                             });
-        }
-
-        asn::ngap::AddProtocolIeIfUsable(
-            *pdu, asn_DEF_ASN_NGAP_RAN_UE_NGAP_ID, ASN_NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
-            ASN_NGAP_Criticality_reject,
-            [ue](void *mem) { *reinterpret_cast<ASN_NGAP_RAN_UE_NGAP_ID_t *>(mem) = ue->ranUeNgapId; });
-
-        asn::ngap::AddProtocolIeIfUsable(
-            *pdu, asn_DEF_ASN_NGAP_UserLocationInformation, ASN_NGAP_ProtocolIE_ID_id_UserLocationInformation,
-            ASN_NGAP_Criticality_ignore, [this](void *mem) {
-                auto *loc = reinterpret_cast<ASN_NGAP_UserLocationInformation *>(mem);
-                loc->present = ASN_NGAP_UserLocationInformation_PR_userLocationInformationNR;
-                loc->choice.userLocationInformationNR = asn::New<ASN_NGAP_UserLocationInformationNR>();
-
-                auto &nr = loc->choice.userLocationInformationNR;
-                nr->timeStamp = asn::New<ASN_NGAP_TimeStamp_t>();
-
-                ngap_utils::ToPlmnAsn_Ref(m_base->config->plmn, nr->nR_CGI.pLMNIdentity);
-                asn::SetBitStringLong<36>(m_base->config->nci, nr->nR_CGI.nRCellIdentity);
-                ngap_utils::ToPlmnAsn_Ref(m_base->config->plmn, nr->tAI.pLMNIdentity);
-                asn::SetOctetString3(nr->tAI.tAC, octet3{m_base->config->tac});
-                asn::SetOctetString4(*nr->timeStamp, octet4{utils::CurrentTimeStamp().seconds32()});
-            });
-    }
-/* // UE Security Capabilities */
-    {
-        asn::ngap::AddProtocolIeIfUsable(
-            *pdu, asn_DEF_ASN_NGAP_RAN_UE_NGAP_ID, ASN_NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
-            ASN_NGAP_Criticality_reject,
-            [ue](void *mem) { *reinterpret_cast<ASN_NGAP_RAN_UE_NGAP_ID_t *>(mem) = ue->ranUeNgapId; });
-
-        asn::ngap::AddProtocolIeIfUsable(
-            *pdu, asn_DEF_ASN_NGAP_UserLocationInformation, ASN_NGAP_ProtocolIE_ID_id_UserLocationInformation,
-            ASN_NGAP_Criticality_ignore, [this](void *mem) {
-                auto *loc = reinterpret_cast<ASN_NGAP_UserLocationInformation *>(mem);
-                loc->present = ASN_NGAP_UserLocationInformation_PR_userLocationInformationNR;
-                loc->choice.userLocationInformationNR = asn::New<ASN_NGAP_UserLocationInformationNR>();
-
-                auto &nr = loc->choice.userLocationInformationNR;
-                nr->timeStamp = asn::New<ASN_NGAP_TimeStamp_t>();
-
-                ngap_utils::ToPlmnAsn_Ref(m_base->config->plmn, nr->nR_CGI.pLMNIdentity);
-                asn::SetBitStringLong<36>(m_base->config->nci, nr->nR_CGI.nRCellIdentity);
-                ngap_utils::ToPlmnAsn_Ref(m_base->config->plmn, nr->tAI.pLMNIdentity);
-                asn::SetOctetString3(nr->tAI.tAC, octet3{m_base->config->tac});
-                asn::SetOctetString4(*nr->timeStamp, octet4{utils::CurrentTimeStamp().seconds32()});
-            });
-    }
   /*  auto *ieUserLocInfo = asn::New<ASN_NGAP_PathSwitchRequestIEs>();
     ieUserLocInfo->id = ASN_NGAP_ProtocolIE_ID_id_UserLocationInformation;
     ieUserLocInfo->criticality = ASN_NGAP_Criticality_ignore;
