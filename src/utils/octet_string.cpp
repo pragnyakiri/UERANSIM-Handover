@@ -8,6 +8,7 @@
 
 #include "octet_string.hpp"
 #include "common.hpp"
+
 #include <cstring>
 
 void OctetString::append(const OctetString &v)
@@ -34,6 +35,12 @@ void OctetString::appendOctet2(octet2 v)
 {
     m_data.push_back(v[0]);
     m_data.push_back(v[1]);
+}
+
+void OctetString::appendOctet2(uint16_t v)
+{
+    appendOctet(static_cast<uint8_t>(v >> 8 & 0xFF));
+    appendOctet(static_cast<uint8_t>(v & 0xFF));
 }
 
 void OctetString::appendOctet2(int v)
@@ -84,6 +91,11 @@ void OctetString::appendOctet8(uint64_t v)
 }
 
 void OctetString::appendOctet4(int v)
+{
+    appendOctet4(octet4{v});
+}
+
+void OctetString::appendOctet4(uint32_t v)
 {
     appendOctet4(octet4{v});
 }

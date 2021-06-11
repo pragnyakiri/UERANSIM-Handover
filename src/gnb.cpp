@@ -6,15 +6,17 @@
 // and subject to the terms and conditions defined in LICENSE file.
 //
 
-#include <app/base_app.hpp>
-#include <app/cli_base.hpp>
-#include <app/cli_cmd.hpp>
-#include <app/proc_table.hpp>
-#include <gnb/gnb.hpp>
 #include <iostream>
-#include <unistd.h>
+#include <stdexcept>
 #include <unordered_map>
-#include <utils/common.hpp>
+
+#include <unistd.h>
+
+#include <gnb/gnb.hpp>
+#include <lib/app/base_app.hpp>
+#include <lib/app/cli_base.hpp>
+#include <lib/app/cli_cmd.hpp>
+#include <lib/app/proc_table.hpp>
 #include <utils/constants.hpp>
 #include <utils/io.hpp>
 #include <utils/options.hpp>
@@ -50,6 +52,9 @@ static nr::gnb::GnbConfig *ReadConfigYaml()
     result->ngapIp = yaml::GetIp4(config, "ngapIp");
     result->gtpIp = yaml::GetIp4(config, "gtpIp");
 
+    if (yaml::HasField(config, "gtpAdvertiseIp"))
+        result->gtpAdvertiseIp = yaml::GetIp4(config, "gtpAdvertiseIp");
+
     result->ignoreStreamIds = yaml::GetBool(config, "ignoreStreamIds");
     result->pagingDrx = EPagingDrx::V128;
     result->name = "UERANSIM-gnb-" + std::to_string(result->plmn.mcc) + "-" + std::to_string(result->plmn.mnc) + "-" +
@@ -65,11 +70,11 @@ static nr::gnb::GnbConfig *ReadConfigYaml()
 
     for (auto &nssai : yaml::GetSequence(config, "slices"))
     {
-        SliceSupport s{};
-        s.sst = yaml::GetInt32(nssai, "sst", 1, 0xFF);
+        SingleSlice s{};
+        s.sst = yaml::GetInt32(nssai, "sst", 0, 0xFF);
         if (yaml::HasField(nssai, "sd"))
-            s.sd = octet3{yaml::GetInt32(nssai, "sd", 1, 0xFFFFFF)};
-        result->nssais.push_back(s);
+            s.sd = octet3{yaml::GetInt32(nssai, "sd", 0, 0xFFFFFF)};
+        result->nssai.slices.push_back(s);
     }
 
     return result;
@@ -77,9 +82,15 @@ static nr::gnb::GnbConfig *ReadConfigYaml()
 
 static void ReadOptions(int argc, char **argv)
 {
-    opt::OptionsDescription desc{cons::Project, cons::Tag, "5G-SA gNB implementation",
-                                 cons::Owner,   "nr-gnb",  {"-c <config-file> [option...]"},
-                                 true,          false};
+    opt::OptionsDescription desc{cons::Project,
+                                 cons::Tag,
+                                 "5G-SA gNB implementation",
+                                 cons::Owner,
+                                 "nr-gnb",
+                                 {"-c <config-file> [option...]"},
+                                 {},
+                                 true,
+                                 false};
 
     opt::OptionItem itemConfigFile = {'c', "config", "Use specified configuration file for gNB", "config-file"};
     opt::OptionItem itemDisableCmd = {'l', "disable-cmd", "Disable command line functionality for this instance",

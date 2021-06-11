@@ -6,14 +6,17 @@
 // and subject to the terms and conditions defined in LICENSE file.
 //
 
-#include <app/base_app.hpp>
-#include <app/cli_base.hpp>
-#include <app/cli_cmd.hpp>
-#include <app/proc_table.hpp>
-#include <app/ue_ctl.hpp>
 #include <iostream>
-#include <ue/ue.hpp>
+#include <stdexcept>
+
 #include <unistd.h>
+
+#include <lib/app/base_app.hpp>
+#include <lib/app/cli_base.hpp>
+#include <lib/app/cli_cmd.hpp>
+#include <lib/app/proc_table.hpp>
+#include <lib/app/ue_ctl.hpp>
+#include <ue/ue.hpp>
 #include <utils/common.hpp>
 #include <utils/concurrent_map.hpp>
 #include <utils/constants.hpp>
@@ -99,28 +102,42 @@ static nr::ue::UeConfig *ReadConfigYaml()
     auto *result = new nr::ue::UeConfig();
     auto config = YAML::LoadFile(g_options.configFile);
 
-    result->plmn.mcc = yaml::GetInt32(config, "mcc", 1, 999);
+    result->hplmn.mcc = yaml::GetInt32(config, "mcc", 1, 999);
     yaml::GetString(config, "mcc", 3, 3);
-    result->plmn.mnc = yaml::GetInt32(config, "mnc", 0, 999);
-    result->plmn.isLongMnc = yaml::GetString(config, "mnc", 2, 3).size() == 3;
+    result->hplmn.mnc = yaml::GetInt32(config, "mnc", 0, 999);
+    result->hplmn.isLongMnc = yaml::GetString(config, "mnc", 2, 3).size() == 3;
 
     for (auto &gnbSearchItem : yaml::GetSequence(config, "gnbSearchList"))
         result->gnbSearchList.push_back(gnbSearchItem.as<std::string>());
 
-    for (auto &nssai : yaml::GetSequence(config, "slices"))
+    if (yaml::HasField(config, "default-nssai"))
     {
-        SliceSupport s{};
-        s.sst = yaml::GetInt32(nssai, "sst", 1, 0xFF);
-        if (yaml::HasField(nssai, "sd"))
-            s.sd = octet3{yaml::GetInt32(nssai, "sd", 1, 0xFFFFFF)};
-        result->nssais.push_back(s);
+        for (auto &sNssai : yaml::GetSequence(config, "default-nssai"))
+        {
+            SingleSlice s{};
+            s.sst = yaml::GetInt32(sNssai, "sst", 0, 0xFF);
+            if (yaml::HasField(sNssai, "sd"))
+                s.sd = octet3{yaml::GetInt32(sNssai, "sd", 0, 0xFFFFFF)};
+            result->defaultConfiguredNssai.slices.push_back(s);
+        }
+    }
+
+    if (yaml::HasField(config, "configured-nssai"))
+    {
+        for (auto &sNssai : yaml::GetSequence(config, "configured-nssai"))
+        {
+            SingleSlice s{};
+            s.sst = yaml::GetInt32(sNssai, "sst", 0, 0xFF);
+            if (yaml::HasField(sNssai, "sd"))
+                s.sd = octet3{yaml::GetInt32(sNssai, "sd", 0, 0xFFFFFF)};
+            result->configuredNssai.slices.push_back(s);
+        }
     }
 
     result->key = OctetString::FromHex(yaml::GetString(config, "key", 32, 32));
     result->opC = OctetString::FromHex(yaml::GetString(config, "op", 32, 32));
     result->amf = OctetString::FromHex(yaml::GetString(config, "amf", 4, 4));
 
-    result->autoBehaviour = true;
     result->configureRouting = !g_options.noRoutingConfigs;
 
     // If we have multiple UEs in the same process, then log names should be separated.
@@ -162,10 +179,10 @@ static nr::ue::UeConfig *ReadConfigYaml()
             if (yaml::HasField(sess, "slice"))
             {
                 auto slice = sess["slice"];
-                s.sNssai = SliceSupport{};
-                s.sNssai->sst = yaml::GetInt32(slice, "sst", 1, 0xFF);
+                s.sNssai = SingleSlice{};
+                s.sNssai->sst = yaml::GetInt32(slice, "sst", 0, 0xFF);
                 if (yaml::HasField(slice, "sd"))
-                    s.sNssai->sd = octet3{yaml::GetInt32(slice, "sd", 1, 0xFFFFFF)};
+                    s.sNssai->sd = octet3{yaml::GetInt32(slice, "sd", 0, 0xFFFFFF)};
             }
 
             std::string type = yaml::GetString(sess, "type");
@@ -182,8 +199,22 @@ static nr::ue::UeConfig *ReadConfigYaml()
             else
                 throw std::runtime_error("Invalid PDU session type: " + type);
 
-            result->initSessions.push_back(s);
+            s.isEmergency = false;
+
+            result->defaultSessions.push_back(s);
         }
+    }
+
+    yaml::AssertHasField(config, "integrityMaxRate");
+    {
+        auto uplink = yaml::GetString(config["integrityMaxRate"], "uplink");
+        auto downlink = yaml::GetString(config["integrityMaxRate"], "downlink");
+        if (uplink != "full" && uplink != "64kbps")
+            throw std::runtime_error("Invalid integrity protection maximum uplink data rate: " + uplink);
+        if (downlink != "full" && downlink != "64kbps")
+            throw std::runtime_error("Invalid integrity protection maximum downlink data rate: " + downlink);
+        result->integrityMaxRate.uplinkFull = uplink == "full";
+        result->integrityMaxRate.downlinkFull = downlink == "full";
     }
 
     return result;
@@ -191,9 +222,9 @@ static nr::ue::UeConfig *ReadConfigYaml()
 
 static void ReadOptions(int argc, char **argv)
 {
-    opt::OptionsDescription desc{cons::Project, cons::Tag, "5G-SA UE implementation",
-                                 cons::Owner,   "nr-ue",   {"-c <config-file> [option...]"},
-                                 true,          false};
+    opt::OptionsDescription desc{
+        cons::Project, cons::Tag, "5G-SA UE implementation", cons::Owner, "nr-ue", {"-c <config-file> [option...]"}, {},
+        true,          false};
 
     opt::OptionItem itemConfigFile = {'c', "config", "Use specified configuration file for UE", "config-file"};
     opt::OptionItem itemImsi = {'i', "imsi", "Use specified IMSI number instead of provided one", "imsi"};
@@ -275,7 +306,6 @@ static void IncrementNumber(std::string &s, int delta)
 static nr::ue::UeConfig *GetConfigByUe(int ueIndex)
 {
     auto *c = new nr::ue::UeConfig();
-    c->autoBehaviour = g_refConfig->autoBehaviour;
     c->key = g_refConfig->key.copy();
     c->opC = g_refConfig->opC.copy();
     c->opType = g_refConfig->opType;
@@ -283,13 +313,15 @@ static nr::ue::UeConfig *GetConfigByUe(int ueIndex)
     c->imei = g_refConfig->imei;
     c->imeiSv = g_refConfig->imeiSv;
     c->supi = g_refConfig->supi;
-    c->plmn = g_refConfig->plmn;
-    c->nssais = g_refConfig->nssais;
+    c->hplmn = g_refConfig->hplmn;
+    c->configuredNssai = g_refConfig->configuredNssai;
+    c->defaultConfiguredNssai = g_refConfig->defaultConfiguredNssai;
     c->supportedAlgs = g_refConfig->supportedAlgs;
     c->gnbSearchList = g_refConfig->gnbSearchList;
-    c->initSessions = g_refConfig->initSessions;
+    c->defaultSessions = g_refConfig->defaultSessions;
     c->configureRouting = g_refConfig->configureRouting;
     c->prefixLogger = g_refConfig->prefixLogger;
+    c->integrityMaxRate = g_refConfig->integrityMaxRate;
 
     if (c->supi.has_value())
         IncrementNumber(c->supi->value, ueIndex);

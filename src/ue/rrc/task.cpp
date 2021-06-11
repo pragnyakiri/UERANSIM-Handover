@@ -11,25 +11,32 @@
 #include <asn/rrc/ASN_RRC_RRCSetupRequest.h>
 #include <asn/rrc/ASN_RRC_ULInformationTransfer-IEs.h>
 #include <asn/rrc/ASN_RRC_ULInformationTransfer.h>
-#include <rrc/encode.hpp>
+#include <lib/rrc/encode.hpp>
 #include <ue/app/task.hpp>
-#include <ue/mr/task.hpp>
 #include <ue/nas/task.hpp>
+#include <ue/rls/task.hpp>
 #include <utils/common.hpp>
+
+static constexpr const int TIMER_ID_MACHINE_CYCLE = 1;
+static constexpr const int TIMER_PERIOD_MACHINE_CYCLE = 2500;
 
 namespace nr::ue
 {
 
-UeRrcTask::UeRrcTask(TaskBase *base) : m_base{base}
+UeRrcTask::UeRrcTask(TaskBase *base) : m_base{base}, m_timers{}
 {
     m_logger = base->logBase->makeUniqueLogger(base->config->getLoggerPrefix() + "rrc");
+
+    m_startedTime = utils::CurrentTimeMillis();
 
     m_state = ERrcState::RRC_IDLE;
 }
 
 void UeRrcTask::onStart()
 {
-    m_logger->debug("RRC layer started");
+    triggerCycle();
+
+    setTimer(TIMER_ID_MACHINE_CYCLE, TIMER_PERIOD_MACHINE_CYCLE);
 }
 
 void UeRrcTask::onQuit()
@@ -45,45 +52,30 @@ void UeRrcTask::onLoop()
 
     switch (msg->msgType)
     {
-    case NtsMessageType::UE_MR_TO_RRC: {
-        auto *w = dynamic_cast<NwUeMrToRrc *>(msg);
+    case NtsMessageType::UE_NAS_TO_RRC: {
+        handleNasSapMessage(*dynamic_cast<NmUeNasToRrc *>(msg));
+        break;
+    }
+    case NtsMessageType::UE_RLS_TO_RRC: {
+        handleRlsSapMessage(*dynamic_cast<NmUeRlsToRrc *>(msg));
+        break;
+    }
+    case NtsMessageType::UE_RRC_TO_RRC: {
+        auto *w = dynamic_cast<NmUeRrcToRrc *>(msg);
         switch (w->present)
         {
-        case NwUeMrToRrc::PLMN_SEARCH_RESPONSE: {
-            auto *nw = new NwUeRrcToNas(NwUeRrcToNas::PLMN_SEARCH_RESPONSE);
-            nw->gnbName = std::move(w->gnbName);
-            m_base->nasTask->push(nw);
+        case NmUeRrcToRrc::TRIGGER_CYCLE:
+            performCycle();
             break;
-        }
-        case NwUeMrToRrc::PLMN_SEARCH_FAILURE: {
-            m_base->nasTask->push(new NwUeRrcToNas(NwUeRrcToNas::PLMN_SEARCH_FAILURE));
-            break;
-        }
-        case NwUeMrToRrc::RRC_PDU_DELIVERY: {
-            handleDownlinkRrc(w->channel, w->pdu);
-            break;
-        }
-        case NwUeMrToRrc::RADIO_LINK_FAILURE: {
-            handleRadioLinkFailure();
-            break;
-        }
         }
         break;
     }
-    case NtsMessageType::UE_NAS_TO_RRC: {
-        auto *w = dynamic_cast<NwUeNasToRrc *>(msg);
-        switch (w->present)
+    case NtsMessageType::TIMER_EXPIRED: {
+        auto *w = dynamic_cast<NmTimerExpired *>(msg);
+        if (w->timerId == TIMER_ID_MACHINE_CYCLE)
         {
-        case NwUeNasToRrc::PLMN_SEARCH_REQUEST: {
-            m_base->mrTask->push(new NwUeRrcToMr(NwUeRrcToMr::PLMN_SEARCH_REQUEST));
-            break;
-        }
-        case NwUeNasToRrc::INITIAL_NAS_DELIVERY:
-            deliverInitialNas(std::move(w->nasPdu), w->rrcEstablishmentCause);
-            break;
-        case NwUeNasToRrc::UPLINK_NAS_DELIVERY:
-            deliverUplinkNas(std::move(w->nasPdu));
-            break;
+            setTimer(TIMER_ID_MACHINE_CYCLE, TIMER_PERIOD_MACHINE_CYCLE);
+            performCycle();
         }
         break;
     }
@@ -93,11 +85,6 @@ void UeRrcTask::onLoop()
     }
 
     delete msg;
-}
-
-void UeRrcTask::handleRadioLinkFailure()
-{
-    m_base->nasTask->push(new NwUeRrcToNas(NwUeRrcToNas::RADIO_LINK_FAILURE));
 }
 
 } // namespace nr::ue

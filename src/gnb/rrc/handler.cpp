@@ -8,10 +8,10 @@
 
 #include "task.hpp"
 
-#include <gnb/mr/task.hpp>
 #include <gnb/ngap/task.hpp>
-#include <rrc/encode.hpp>
+#include <lib/rrc/encode.hpp>
 
+#include <asn/ngap/ASN_NGAP_FiveG-S-TMSI.h>
 #include <asn/rrc/ASN_RRC_BCCH-BCH-Message.h>
 #include <asn/rrc/ASN_RRC_BCCH-DL-SCH-Message.h>
 #include <asn/rrc/ASN_RRC_CellGroupConfig.h>
@@ -20,6 +20,9 @@
 #include <asn/rrc/ASN_RRC_DLInformationTransfer-IEs.h>
 #include <asn/rrc/ASN_RRC_DLInformationTransfer.h>
 #include <asn/rrc/ASN_RRC_PCCH-Message.h>
+#include <asn/rrc/ASN_RRC_Paging.h>
+#include <asn/rrc/ASN_RRC_PagingRecord.h>
+#include <asn/rrc/ASN_RRC_PagingRecordList.h>
 #include <asn/rrc/ASN_RRC_RRCRelease-IEs.h>
 #include <asn/rrc/ASN_RRC_RRCRelease.h>
 #include <asn/rrc/ASN_RRC_RRCSetup-IEs.h>
@@ -56,7 +59,7 @@ void GnbRrcTask::handleDownlinkNasDelivery(int ueId, const OctetString &nasPdu)
 
 void GnbRrcTask::deliverUplinkNas(int ueId, OctetString &&nasPdu)
 {
-    auto *w = new NwGnbRrcToNgap(NwGnbRrcToNgap::UPLINK_NAS_DELIVERY);
+    auto *w = new NmGnbRrcToNgap(NmGnbRrcToNgap::UPLINK_NAS_DELIVERY);
     w->ueId = ueId;
     w->pdu = std::move(nasPdu);
     m_base->ngapTask->push(w);
@@ -69,79 +72,9 @@ void GnbRrcTask::receiveUplinkInformationTransfer(int ueId, const ASN_RRC_ULInfo
             ueId, asn::GetOctetString(*msg.criticalExtensions.choice.ulInformationTransfer->dedicatedNAS_Message));
 }
 
-void GnbRrcTask::receiveRrcSetupRequest(int ueId, const ASN_RRC_RRCSetupRequest &msg)
-{
-    auto *ue = tryFindUe(ueId);
-    if (ue)
-    {
-        m_logger->warn("Discarding RRC Setup Request, UE context already exists");
-        return;
-    }
-
-    if (msg.rrcSetupRequest.ue_Identity.present == ASN_RRC_InitialUE_Identity_PR_ng_5G_S_TMSI_Part1)
-    {
-        m_logger->err("RRC Setup Request with TMSI not implemented yet");
-        return;
-    }
-
-    if (msg.rrcSetupRequest.ue_Identity.present != ASN_RRC_InitialUE_Identity_PR_randomValue)
-    {
-        m_logger->err("Bad message");
-        return;
-    }
-
-    int64_t initialRandomId = asn::GetBitStringLong<39>(msg.rrcSetupRequest.ue_Identity.choice.randomValue);
-    if (tryFindByInitialRandomId(initialRandomId) != nullptr)
-    {
-        m_logger->err("Initial random ID conflict [%ld], discarding RRC Setup Request", initialRandomId);
-        return;
-    }
-
-    ue = createUe(ueId);
-    ue->initialRandomId = initialRandomId;
-    ue->establishmentCause = msg.rrcSetupRequest.establishmentCause;
-
-    // Prepare RRC Setup
-    auto *pdu = asn::New<ASN_RRC_DL_CCCH_Message>();
-    pdu->message.present = ASN_RRC_DL_CCCH_MessageType_PR_c1;
-    pdu->message.choice.c1 = asn::NewFor(pdu->message.choice.c1);
-    pdu->message.choice.c1->present = ASN_RRC_DL_CCCH_MessageType__c1_PR_rrcSetup;
-    auto &rrcSetup = pdu->message.choice.c1->choice.rrcSetup = asn::New<ASN_RRC_RRCSetup>();
-    rrcSetup->rrc_TransactionIdentifier = getNextTid();
-    rrcSetup->criticalExtensions.present = ASN_RRC_RRCSetup__criticalExtensions_PR_rrcSetup;
-    auto &rrcSetupIEs = rrcSetup->criticalExtensions.choice.rrcSetup = asn::New<ASN_RRC_RRCSetup_IEs>();
-
-    ASN_RRC_CellGroupConfig masterCellGroup{};
-    masterCellGroup.cellGroupId = 0;
-
-    asn::SetOctetString(rrcSetupIEs->masterCellGroup,
-                        rrc::encode::EncodeS(asn_DEF_ASN_RRC_CellGroupConfig, &masterCellGroup));
-
-    m_logger->debug("Sending RRC Setup for UE[%d]", ueId);
-    sendRrcMessage(ueId, pdu);
-}
-
-void GnbRrcTask::receiveRrcSetupComplete(int ueId, const ASN_RRC_RRCSetupComplete &msg)
-{
-    if (msg.criticalExtensions.present != ASN_RRC_RRCSetupComplete__criticalExtensions_PR_rrcSetupComplete)
-        return;
-
-    auto *ue = findUe(ueId);
-    if (!ue)
-        return;
-
-    auto setupComplete = msg.criticalExtensions.choice.rrcSetupComplete;
-
-    auto *w = new NwGnbRrcToNgap(NwGnbRrcToNgap::INITIAL_NAS_DELIVERY);
-    w->ueId = ueId;
-    w->pdu = asn::GetOctetString(setupComplete->dedicatedNAS_Message);
-    w->rrcEstablishmentCause = ue->establishmentCause;
-    m_base->ngapTask->push(w);
-}
-
 void GnbRrcTask::releaseConnection(int ueId)
 {
-    m_logger->debug("Releasing RRC connection for UE[%d]", ueId);
+    m_logger->info("Releasing RRC connection for UE[%d]", ueId);
 
     // Send RRC Release message
     auto *pdu = asn::New<ASN_RRC_DL_DCCH_Message>();
@@ -155,11 +88,6 @@ void GnbRrcTask::releaseConnection(int ueId)
 
     sendRrcMessage(ueId, pdu);
 
-    // Notify MR task
-    auto *w = new NwGnbRrcToMr(NwGnbRrcToMr::AN_RELEASE);
-    w->ueId = ueId;
-    m_base->mrTask->push(w);
-
     // Delete UE RRC context
     m_ueCtx.erase(ueId);
 }
@@ -167,12 +95,40 @@ void GnbRrcTask::releaseConnection(int ueId)
 void GnbRrcTask::handleRadioLinkFailure(int ueId)
 {
     // Notify NGAP task
-    auto *w = new NwGnbRrcToNgap(NwGnbRrcToNgap::RADIO_LINK_FAILURE);
+    auto *w = new NmGnbRrcToNgap(NmGnbRrcToNgap::RADIO_LINK_FAILURE);
     w->ueId = ueId;
     m_base->ngapTask->push(w);
 
     // Delete UE RRC context
     m_ueCtx.erase(ueId);
+}
+
+void GnbRrcTask::handlePaging(const asn::Unique<ASN_NGAP_FiveG_S_TMSI> &tmsi,
+                              const asn::Unique<ASN_NGAP_TAIListForPaging> &taiList)
+{
+    // Construct and send a Paging message
+    auto *pdu = asn::New<ASN_RRC_PCCH_Message>();
+    pdu->message.present = ASN_RRC_PCCH_MessageType_PR_c1;
+    pdu->message.choice.c1 = asn::NewFor(pdu->message.choice.c1);
+    pdu->message.choice.c1->present = ASN_RRC_PCCH_MessageType__c1_PR_paging;
+    auto &paging = pdu->message.choice.c1->choice.paging = asn::New<ASN_RRC_Paging>();
+
+    auto *record = asn::New<ASN_RRC_PagingRecord>();
+    record->ue_Identity.present = ASN_RRC_PagingUE_Identity_PR_ng_5G_S_TMSI;
+
+    OctetString tmsiOctets{};
+    tmsiOctets.appendOctet2(bits::Ranged16({
+        {10, asn::GetBitStringInt<10>(tmsi->aMFSetID)},
+        {6, asn::GetBitStringInt<10>(tmsi->aMFPointer)},
+    }));
+    tmsiOctets.append(asn::GetOctetString(tmsi->fiveG_TMSI));
+
+    asn::SetBitString(record->ue_Identity.choice.ng_5G_S_TMSI, tmsiOctets);
+
+    paging->pagingRecordList = asn::NewFor(paging->pagingRecordList);
+    asn::SequenceAdd(*paging->pagingRecordList, record);
+
+    sendRrcMessage(pdu);
 }
 
 } // namespace nr::gnb

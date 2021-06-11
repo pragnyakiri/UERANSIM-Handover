@@ -8,13 +8,20 @@
 
 #pragma once
 
-#include <app/monitor.hpp>
-#include <app/ue_ctl.hpp>
+#include "timer.hpp"
+
 #include <array>
-#include <nas/nas.hpp>
-#include <nas/timer.hpp>
+#include <atomic>
+#include <memory>
+#include <set>
+#include <unordered_set>
+
+#include <lib/app/monitor.hpp>
+#include <lib/app/ue_ctl.hpp>
+#include <lib/nas/nas.hpp>
 #include <utils/common_types.hpp>
 #include <utils/json.hpp>
+#include <utils/locked.hpp>
 #include <utils/logger.hpp>
 #include <utils/nts.hpp>
 #include <utils/octet_string.hpp>
@@ -23,10 +30,32 @@ namespace nr::ue
 {
 
 class UeAppTask;
-class UeMrTask;
 class NasTask;
 class UeRrcTask;
+class UeRlsTask;
 class UserEquipment;
+
+struct UeCellDesc
+{
+    int dbm{};
+
+    struct
+    {
+        bool hasMib = false;
+        bool isBarred = true;
+        bool isIntraFreqReselectAllowed = true;
+    } mib{};
+
+    struct
+    {
+        bool hasSib1 = false;
+        bool isReserved = false;
+        int64_t nci = 0;
+        int tac = 0;
+        Plmn plmn;
+        UacAiBarringSet aiBarringSet;
+    } sib1{};
+};
 
 struct SupportedAlgs
 {
@@ -47,28 +76,36 @@ enum class OpType
 struct SessionConfig
 {
     nas::EPduSessionType type{};
-    std::optional<SliceSupport> sNssai{};
+    std::optional<SingleSlice> sNssai{};
     std::optional<std::string> apn{};
+    bool isEmergency{};
+};
+
+struct IntegrityMaxDataRateConfig
+{
+    bool uplinkFull{};
+    bool downlinkFull{};
 };
 
 struct UeConfig
 {
     /* Read from config file */
     std::optional<Supi> supi{};
-    Plmn plmn{};
+    Plmn hplmn{};
     OctetString key{};
     OctetString opC{};
     OpType opType{};
     OctetString amf{};
     std::optional<std::string> imei{};
     std::optional<std::string> imeiSv{};
-    std::vector<SliceSupport> nssais{};
     SupportedAlgs supportedAlgs{};
     std::vector<std::string> gnbSearchList{};
-    std::vector<SessionConfig> initSessions{};
+    std::vector<SessionConfig> defaultSessions{};
+    IntegrityMaxDataRateConfig integrityMaxRate{};
+    NetworkSlice defaultConfiguredNssai{};
+    NetworkSlice configuredNssai{};
 
     /* Assigned by program */
-    bool autoBehaviour{};
     bool configureRouting{};
     bool prefixLogger{};
 
@@ -97,6 +134,45 @@ struct UeConfig
     }
 };
 
+struct CellSelectionReport
+{
+    int outOfPlmnCells{};
+    int sib1MissingCells{};
+    int reservedCells{};
+    int barredCells{};
+    int forbiddenTaiCells{};
+};
+
+struct ActiveCellInfo
+{
+    int cellId{};
+    ECellCategory category{};
+    Plmn plmn{};
+    int tac{};
+
+    [[nodiscard]] bool hasValue() const;
+};
+
+struct UeSharedContext
+{
+    Locked<std::unordered_set<Plmn>> availablePlmns;
+    Locked<Plmn> selectedPlmn;
+    Locked<ActiveCellInfo> currentCell;
+    Locked<std::vector<Tai>> forbiddenTaiRoaming;
+    Locked<std::vector<Tai>> forbiddenTaiRps;
+    Locked<GutiMobileIdentity> providedGuti;
+    Locked<GutiMobileIdentity> providedTmsi;
+
+    Plmn getCurrentPlmn();
+    Tai getCurrentTai();
+    bool hasActiveCell();
+};
+
+struct RlsSharedContext
+{
+    std::atomic<uint64_t> sti{};
+};
+
 struct TaskBase
 {
     UserEquipment *ue{};
@@ -106,40 +182,45 @@ struct TaskBase
     app::INodeListener *nodeListener{};
     NtsTask *cliCallbackTask{};
 
+    UeSharedContext shCtx{};
+
     UeAppTask *appTask{};
-    UeMrTask *mrTask{};
     NasTask *nasTask{};
     UeRrcTask *rrcTask{};
+    UeRlsTask *rlsTask{};
 };
 
-struct UeTimers
+struct RrcTimers
 {
-    nas::NasTimer t3346; /* MM - ... */
-    nas::NasTimer t3396; /* SM - ... */
+    UeTimer t300;
 
-    nas::NasTimer t3444; /* MM - ... */
-    nas::NasTimer t3445; /* MM - ... */
+    RrcTimers();
+};
 
-    nas::NasTimer t3502; /* MM - ... */
-    nas::NasTimer t3510; /* MM - Registration Request transmission timer */
-    nas::NasTimer t3511; /* MM - ... */
-    nas::NasTimer t3512; /* MM - Periodic registration update timer */
-    nas::NasTimer t3516; /* MM - 5G AKA - RAND and RES* storing timer */
-    nas::NasTimer t3517; /* MM - Service Request transmission timer */
-    nas::NasTimer t3519; /* MM - Transmission with fresh SUCI timer */
-    nas::NasTimer t3520; /* MM - ... */
-    nas::NasTimer t3521; /* MM - De-registration transmission timer for not switch off */
-    nas::NasTimer t3525; /* MM - ... */
-    nas::NasTimer t3540; /* MM - ... */
+struct NasTimers
+{
+    UeTimer t3346; /* MM - ... */
+    UeTimer t3396; /* SM - ... */
 
-    nas::NasTimer t3580; /* SM - ... */
-    nas::NasTimer t3581; /* SM - ... */
-    nas::NasTimer t3582; /* SM - ... */
-    nas::NasTimer t3583; /* SM - ... */
-    nas::NasTimer t3584; /* SM - ... */
-    nas::NasTimer t3585; /* SM - ... */
+    UeTimer t3444; /* MM - ... */
+    UeTimer t3445; /* MM - ... */
 
-    UeTimers();
+    UeTimer t3502; /* MM - Initiation of the registration procedure, if still required */
+    UeTimer t3510; /* MM - Registration Request transmission timer */
+    UeTimer t3511; /* MM - Retransmission of the REGISTRATION REQUEST, if still required */
+    UeTimer t3512; /* MM - Periodic registration update timer */
+    UeTimer t3516; /* MM - 5G AKA - RAND and RES* storing timer */
+    UeTimer t3517; /* MM - Service Request transmission timer */
+    UeTimer t3519; /* MM - Transmission with fresh SUCI timer */
+    UeTimer t3520; /* MM - ... */
+    UeTimer t3521; /* MM - De-registration transmission timer for not switch off */
+    UeTimer t3525; /* MM - ... */
+    UeTimer t3540; /* MM - ... */
+
+    UeTimer t3584; /* SM - ... */
+    UeTimer t3585; /* SM - ... */
+
+    NasTimers();
 };
 
 enum class ERmState
@@ -156,7 +237,7 @@ enum class ECmState
 
 enum class E5UState
 {
-    U1_UPDATED,
+    U1_UPDATED = 0,
     U2_NOT_UPDATED,
     U3_ROAMING_NOT_ALLOWED
 };
@@ -188,9 +269,9 @@ enum class EMmState
 
 enum class EMmSubState
 {
-    MM_NULL_NA,
+    MM_NULL_PS,
 
-    MM_DEREGISTERED_NA,
+    MM_DEREGISTERED_PS,
     MM_DEREGISTERED_NORMAL_SERVICE,
     MM_DEREGISTERED_LIMITED_SERVICE,
     MM_DEREGISTERED_ATTEMPTING_REGISTRATION,
@@ -200,9 +281,9 @@ enum class EMmSubState
     MM_DEREGISTERED_ECALL_INACTIVE,
     MM_DEREGISTERED_INITIAL_REGISTRATION_NEEDED,
 
-    MM_REGISTERED_INITIATED_NA,
+    MM_REGISTERED_INITIATED_PS,
 
-    MM_REGISTERED_NA,
+    MM_REGISTERED_PS,
     MM_REGISTERED_NORMAL_SERVICE,
     MM_REGISTERED_NON_ALLOWED_SERVICE,
     MM_REGISTERED_ATTEMPTING_REGISTRATION_UPDATE,
@@ -211,9 +292,24 @@ enum class EMmSubState
     MM_REGISTERED_NO_CELL_AVAILABLE,
     MM_REGISTERED_UPDATE_NEEDED,
 
-    MM_DEREGISTERED_INITIATED_NA,
+    MM_DEREGISTERED_INITIATED_PS,
 
-    MM_SERVICE_REQUEST_INITIATED_NA
+    MM_SERVICE_REQUEST_INITIATED_PS
+};
+
+enum class EPsState
+{
+    INACTIVE,
+    ACTIVE_PENDING,
+    ACTIVE,
+    INACTIVE_PENDING,
+    MODIFICATION_PENDING
+};
+
+enum class EPtState
+{
+    INACTIVE,
+    PENDING,
 };
 
 struct PduSession
@@ -221,17 +317,24 @@ struct PduSession
     static constexpr const int MIN_ID = 1;
     static constexpr const int MAX_ID = 15;
 
-    int id{};
-    bool isEstablished{};
+    const int psi;
+
+    EPsState psState{};
+    bool uplinkPending{};
 
     nas::EPduSessionType sessionType{};
     std::optional<std::string> apn{};
-    std::optional<SliceSupport> sNssai{};
+    std::optional<SingleSlice> sNssai{};
+    bool isEmergency{};
 
     std::optional<nas::IEQoSRules> authorizedQoSRules{};
     std::optional<nas::IESessionAmbr> sessionAmbr{};
     std::optional<nas::IEQoSFlowDescriptions> authorizedQoSFlowDescriptions{};
     std::optional<nas::IEPduAddress> pduAddress{};
+
+    explicit PduSession(int psi) : psi(psi)
+    {
+    }
 };
 
 struct ProcedureTransaction
@@ -239,7 +342,10 @@ struct ProcedureTransaction
     static constexpr const int MIN_ID = 1;
     static constexpr const int MAX_ID = 254;
 
-    int id{};
+    EPtState state{};
+    std::unique_ptr<UeTimer> timer{};
+    std::unique_ptr<nas::SmMessage> message{};
+    int psi{};
 };
 
 enum class EConnectionIdentifier
@@ -267,10 +373,6 @@ struct UeKeys
 {
     OctetString abba{};
 
-    OctetString rand{};
-    OctetString res{};
-    OctetString resStar{}; // used in 5G-AKA
-
     OctetString kAusf{};
     OctetString kSeaf{};
     OctetString kAmf{};
@@ -280,9 +382,6 @@ struct UeKeys
     [[nodiscard]] UeKeys deepCopy() const
     {
         UeKeys keys;
-        keys.rand = rand.subCopy(0);
-        keys.res = res.subCopy(0);
-        keys.resStar = resStar.subCopy(0);
         keys.kAusf = kAusf.subCopy(0);
         keys.kSeaf = kSeaf.subCopy(0);
         keys.kAmf = kAmf.subCopy(0);
@@ -354,10 +453,108 @@ enum class EAutnValidationRes
     SYNCHRONISATION_FAILURE,
 };
 
-struct UePduSessionInfo
+enum class ERegUpdateCause
 {
-    std::string type{};
-    std::string address{};
+    // when the UE detects entering a tracking area that is not in the list of tracking areas that the UE previously
+    // registered in the AMF
+    ENTER_UNLISTED_TRACKING_AREA,
+    // when the periodic registration updating timer T3512 expires
+    T3512_EXPIRY,
+    // when the UE receives a CONFIGURATION UPDATE COMMAND message indicating "registration requested" in the
+    // Configuration update indication IE as specified in subclauses 5.4.4.3;
+    CONFIGURATION_UPDATE,
+    // when the UE in state 5GMM-REGISTERED.ATTEMPTING-REGISTRATION-UPDATE either receives a paging or the UE receives a
+    // NOTIFICATION message with access type indicating 3GPP access over the non-3GPP access for PDU sessions associated
+    // with 3GPP access
+    PAGING_OR_NOTIFICATION,
+    // upon inter-system change from S1 mode to N1 mode
+    INTER_SYSTEM_CHANGE_S1_TO_N1,
+    // when the UE receives an indication of "RRC Connection failure" from the lower layers and does not have signalling
+    // pending (i.e. when the lower layer requests NAS signalling connection recovery) except for the case specified in
+    // subclause 5.3.1.4;
+    CONNECTION_RECOVERY,
+    // when the UE receives a fallback indication from the lower layers and does not have signalling pending (i.e. when
+    // the lower layer requests NAS signalling connection recovery, see subclauses 5.3.1.4 and 5.3.1.2);
+    FALLBACK_INDICATION,
+    // when the UE changes the 5GMM capability or the S1 UE network capability or both
+    MM_OR_S1_CAPABILITY_CHANGE,
+    // when the UE's usage setting changes
+    USAGE_SETTING_CHANGE,
+    // when the UE needs to change the slice(s) it is currently registered to
+    SLICE_CHANGE,
+    // when the UE changes the UE specific DRX parameters
+    DRX_CHANGE,
+    // when the UE in state 5GMM-REGISTERED.ATTEMPTING-REGISTRATION-UPDATE receives a request from the upper layers to
+    // establish an emergency PDU session or perform emergency services fallback
+    EMERGENCY_CASE,
+    // when the UE needs to register for SMS over NAS, indicate a change in the requirements to use SMS over NAS, or
+    // de-register from SMS over NAS;
+    SMS_OVER_NAS_CHANGE,
+    // when the UE needs to indicate PDU session status to the network after performing a local release of PDU
+    // session(s) as specified in subclauses 6.4.1.5 and 6.4.3.5;
+    PS_STATUS_INFORM,
+    // when the UE in 5GMM-IDLE mode changes the radio capability for NG-RAN
+    RADIO_CAP_CHANGE,
+    // when the UE needs to request new LADN information
+    NEW_LADN_NEEDED,
+    // when the UE needs to request the use of MICO mode or needs to stop the use of MICO mode
+    MICO_MODE_CHANGE,
+    // when the UE in 5GMM-CONNECTED mode with RRC inactive indication enters a cell in the current registration area
+    // belonging to an equivalent PLMN of the registered PLMN and not belonging to the registered PLMN;
+    ENTER_EQUIVALENT_PLMN_CELL,
+    // when the UE receives a SERVICE REJECT message with the 5GMM cause value set to #28 "Restricted service area".
+    RESTRICTED_SERVICE_AREA,
+    // ------ following are not specified by 24.501 ------
+    TAI_CHANGE_IN_ATT_UPD,
+    PLMN_CHANGE_IN_ATT_UPD,
+    T3346_EXPIRY_IN_ATT_UPD,
+    T3502_EXPIRY_IN_ATT_UPD,
+    T3511_EXPIRY_IN_ATT_UPD,
+};
+
+enum class EServiceReqCause
+{
+    // a) the UE, in 5GMM-IDLE mode over 3GPP access, receives a paging request from the network
+    IDLE_PAGING,
+    // b) the UE, in 5GMM-CONNECTED mode over 3GPP access, receives a notification from the network with access type
+    // indicating non-3GPP access
+    CONNECTED_3GPP_NOTIFICATION_N3GPP,
+    // c) the UE, in 5GMM-IDLE mode over 3GPP access, has uplink signalling pending
+    IDLE_UPLINK_SIGNAL_PENDING,
+    // d) the UE, in 5GMM-IDLE mode over 3GPP access, has uplink user data pending
+    IDLE_UPLINK_DATA_PENDING,
+    // e) the UE, in 5GMM-CONNECTED mode or in 5GMM-CONNECTED mode with RRC inactive indication, has user data pending
+    // due to no user-plane resources established for PDU session(s) used for user data transport
+    CONNECTED_UPLINK_DATA_PENDING,
+    // f) the UE in 5GMM-IDLE mode over non-3GPP access, receives an indication from the lower layers of non-3GPP
+    // access, that the access stratum connection is established between UE and network
+    NON_3GPP_AS_ESTABLISHED,
+    // g) the UE, in 5GMM-IDLE mode over 3GPP access, receives a notification from the network with access type
+    // indicating 3GPP access when the UE is in 5GMM-CONNECTED mode over non-3GPP access
+    IDLE_3GPP_NOTIFICATION_N3GPP,
+    // h) the UE, in 5GMM-IDLE, 5GMM-CONNECTED mode over 3GPP access, or 5GMM-CONNECTED mode with RRC inactive
+    // indication, receives a request for emergency services fallback from the upper layer and performs emergency
+    // services fallback as specified in subclause 4.13.4.2 of 3GPP TS 23.502 [9]
+    EMERGENCY_FALLBACK,
+    // i) the UE, in 5GMM-CONNECTED mode over 3GPP access or in 5GMM-CONNECTED mode with RRC inactive indication,
+    // receives a fallback indication from the lower layers (see subclauses 5.3.1.2 and 5.3.1.4) and or the UE has a
+    // pending NAS procedure other than a registration, service request, or de-registration procedure
+    FALLBACK_INDICATION
+};
+
+enum class EProcRc
+{
+    OK,
+    CANCEL,
+    STAY,
+};
+
+struct ProcControl
+{
+    std::optional<EInitialRegCause> initialRegistration{};
+    std::optional<ERegUpdateCause> mobilityRegistration{};
+    std::optional<EServiceReqCause> serviceRequest{};
+    std::optional<EDeregCause> deregistration{};
 };
 
 Json ToJson(const ECmState &state);
@@ -365,7 +562,10 @@ Json ToJson(const ERmState &state);
 Json ToJson(const EMmState &state);
 Json ToJson(const EMmSubState &state);
 Json ToJson(const E5UState &state);
-Json ToJson(const UeConfig &v);
-Json ToJson(const UeTimers &v);
+Json ToJson(const NasTimers &v);
+Json ToJson(const ERegUpdateCause &v);
+Json ToJson(const EPsState &v);
+Json ToJson(const EServiceReqCause &v);
+Json ToJson(const ERrcState &v);
 
 } // namespace nr::ue

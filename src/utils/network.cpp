@@ -9,8 +9,9 @@
 #include "network.hpp"
 #include "libc_error.hpp"
 
-#include <arpa/inet.h>
 #include <cstring>
+
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <stdexcept>
 #include <sys/socket.h>
@@ -19,10 +20,13 @@
 
 static std::string OctetStringToIpString(const OctetString &address)
 {
-    if (address.length() != 4 && address.length() != 16)
+    if (address.length() != 4 && address.length() != 16 && address.length() != 20)
         throw std::runtime_error("Bad Inet address octet string length");
 
-    int domain = address.length() == 4 ? AF_INET : AF_INET6;
+    // (If the length is 20, the address contains IPv4v6 which is 4+16 length. In this case
+    //  we prefer IPv4, and take the first 4 octets.)
+    int domain = (address.length() == 4 || address.length() == 20) ? AF_INET : AF_INET6;
+
     unsigned char buf[sizeof(struct in6_addr)] = {0};
     char str[INET6_ADDRSTRLEN] = {0};
 
@@ -170,12 +174,12 @@ int Socket::receive(uint8_t *buffer, size_t bufferSize, int timeoutMs, InetAddre
         sockaddr_storage peerAddr{};
         socklen_t peerAddrLen = sizeof(struct sockaddr_storage);
 
-        rc = recvfrom(fd, buffer, bufferSize, 0, (struct sockaddr *)&peerAddr, &peerAddrLen);
-        if (rc == -1)
+        auto r = recvfrom(fd, buffer, bufferSize, 0, (struct sockaddr *)&peerAddr, &peerAddrLen);
+        if (r == -1)
             throw LibError("recvfrom recv failed: ", errno);
 
         outAddress = InetAddress{peerAddr, peerAddrLen};
-        return rc;
+        return static_cast<int>(r);
     }
 
     return 0;
@@ -184,8 +188,12 @@ int Socket::receive(uint8_t *buffer, size_t bufferSize, int timeoutMs, InetAddre
 void Socket::send(const InetAddress &address, const uint8_t *buffer, size_t size) const
 {
     ssize_t rc = sendto(fd, buffer, size, MSG_DONTWAIT, address.getSockAddr(), address.getSockLen());
-    if (static_cast<size_t>(rc) != size)
-        throw LibError("sendto failed: ", errno);
+    if (rc == -1)
+    {
+        int err = errno;
+        if (err != EAGAIN)
+            throw LibError("sendto failed: ", errno);
+    }
 }
 
 bool Socket::hasFd() const

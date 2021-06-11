@@ -7,18 +7,20 @@
 //
 
 #include <algorithm>
-#include <app/cli_base.hpp>
-#include <app/proc_table.hpp>
 #include <iostream>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <vector>
+
+#include <lib/app/cli_base.hpp>
+#include <lib/app/proc_table.hpp>
 #include <utils/common.hpp>
 #include <utils/constants.hpp>
 #include <utils/io.hpp>
 #include <utils/network.hpp>
 #include <utils/options.hpp>
-#include <vector>
 
 static struct Options
 {
@@ -133,7 +135,7 @@ static void ReadOptions(int argc, char **argv)
 {
     opt::OptionsDescription desc{"UERANSIM",  cons::Tag, "Command Line Interface",
                                  cons::Owner, "nr-cli",  {"<node-name> [option...]", "--dump"},
-                                 true,        false};
+                                 {},          true,      false};
 
     opt::OptionItem itemDump = {'d', "dump", "List all UE and gNBs in the environment", std::nullopt};
     opt::OptionItem itemExec = {'e', "exec", "Execute the given command directly without an interactive shell",

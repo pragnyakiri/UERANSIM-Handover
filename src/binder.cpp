@@ -6,11 +6,12 @@
 // and subject to the terms and conditions defined in LICENSE file.
 //
 
-#include <arpa/inet.h>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#include <arpa/inet.h>
 #include <dlfcn.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -101,7 +102,7 @@ extern "C" int connect(int fd, const struct sockaddr *sk, socklen_t sl)
         // HACK: DNS sorgusunu 127.0.0.53'e yaptığından eğer DNS sorgusu yapılıyorsa source IP değiştirmiyoruz.
         //       127.0.0.53'in hex karşılığı: 0x3500007F (big endian)
         // LATER NOTE: Aslında bunu DNS için değil genel olarak loopback'lerin hepsi için yapmak gerekir.
-        //             Belki de rotalamada linux üzerinden ayar yapılırken specify ediliyodur. Bu kısma gerek
+        //             Belki de rotalamada linux üzerinden ayar yapılırken specify ediliyordur. Bu kısma gerek
         //             kalmayabilir.
         if (rsk_in->sin_addr.s_addr != 0x3500007F)
         {

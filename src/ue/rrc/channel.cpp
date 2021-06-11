@@ -8,8 +8,8 @@
 
 #include "task.hpp"
 
-#include <rrc/encode.hpp>
-#include <ue/mr/task.hpp>
+#include <lib/rrc/encode.hpp>
+#include <ue/rls/task.hpp>
 
 #include <asn/rrc/ASN_RRC_RRCReject.h>
 #include <asn/rrc/ASN_RRC_RRCSetup.h>
@@ -19,8 +19,11 @@
 namespace nr::ue
 {
 
-void UeRrcTask::handleDownlinkRrc(rrc::RrcChannel channel, const OctetString &rrcPdu)
+void UeRrcTask::handleDownlinkRrc(int cellId, rrc::RrcChannel channel, const OctetString &rrcPdu)
 {
+    if (!hasSignalToCell(cellId))
+        return;
+
     switch (channel)
     {
     case rrc::RrcChannel::BCCH_BCH: {
@@ -28,7 +31,7 @@ void UeRrcTask::handleDownlinkRrc(rrc::RrcChannel channel, const OctetString &rr
         if (pdu == nullptr)
             m_logger->err("RRC BCCH-BCH PDU decoding failed.");
         else
-            receiveRrcMessage(pdu);
+            receiveRrcMessage(cellId, pdu);
         asn::Free(asn_DEF_ASN_RRC_BCCH_BCH_Message, pdu);
         break;
     }
@@ -37,7 +40,7 @@ void UeRrcTask::handleDownlinkRrc(rrc::RrcChannel channel, const OctetString &rr
         if (pdu == nullptr)
             m_logger->err("RRC BCCH-DL-SCH PDU decoding failed.");
         else
-            receiveRrcMessage(pdu);
+            receiveRrcMessage(cellId, pdu);
         asn::Free(asn_DEF_ASN_RRC_BCCH_DL_SCH_Message, pdu);
         break;
     }
@@ -46,134 +49,42 @@ void UeRrcTask::handleDownlinkRrc(rrc::RrcChannel channel, const OctetString &rr
         if (pdu == nullptr)
             m_logger->err("RRC DL-CCCH PDU decoding failed.");
         else
-            receiveRrcMessage(pdu);
+            receiveRrcMessage(cellId, pdu);
         asn::Free(asn_DEF_ASN_RRC_DL_CCCH_Message, pdu);
         break;
     }
     case rrc::RrcChannel::DL_DCCH: {
-        auto *pdu = rrc::encode::Decode<ASN_RRC_DL_DCCH_Message>(asn_DEF_ASN_RRC_DL_DCCH_Message, rrcPdu);
-        if (pdu == nullptr)
-            m_logger->err("RRC DL-DCCH PDU decoding failed.");
-        else
-            receiveRrcMessage(pdu);
-        asn::Free(asn_DEF_ASN_RRC_DL_DCCH_Message, pdu);
+        if (isActiveCell(cellId))
+        {
+            auto *pdu = rrc::encode::Decode<ASN_RRC_DL_DCCH_Message>(asn_DEF_ASN_RRC_DL_DCCH_Message, rrcPdu);
+            if (pdu == nullptr)
+                m_logger->err("RRC DL-DCCH PDU decoding failed.");
+            else
+                receiveRrcMessage(pdu);
+            asn::Free(asn_DEF_ASN_RRC_DL_DCCH_Message, pdu);
+        }
         break;
     };
     case rrc::RrcChannel::PCCH: {
-        auto *pdu = rrc::encode::Decode<ASN_RRC_PCCH_Message>(asn_DEF_ASN_RRC_PCCH_Message, rrcPdu);
-        if (pdu == nullptr)
-            m_logger->err("RRC PCCH PDU decoding failed.");
-        else
-            receiveRrcMessage(pdu);
-        asn::Free(asn_DEF_ASN_RRC_PCCH_Message, pdu);
+        if (isActiveCell(cellId))
+        {
+            auto *pdu = rrc::encode::Decode<ASN_RRC_PCCH_Message>(asn_DEF_ASN_RRC_PCCH_Message, rrcPdu);
+            if (pdu == nullptr)
+                m_logger->err("RRC PCCH PDU decoding failed.");
+            else
+                receiveRrcMessage(pdu);
+            asn::Free(asn_DEF_ASN_RRC_PCCH_Message, pdu);
+        }
         break;
     }
-    case rrc::RrcChannel::UL_CCCH: {
-        auto *pdu = rrc::encode::Decode<ASN_RRC_UL_CCCH_Message>(asn_DEF_ASN_RRC_UL_CCCH_Message, rrcPdu);
-        if (pdu == nullptr)
-            m_logger->err("RRC UL-CCCH PDU decoding failed.");
-        else
-            receiveRrcMessage(pdu);
-        asn::Free(asn_DEF_ASN_RRC_UL_CCCH_Message, pdu);
+    case rrc::RrcChannel::UL_CCCH:
+    case rrc::RrcChannel::UL_CCCH1:
+    case rrc::RrcChannel::UL_DCCH:
         break;
     }
-    case rrc::RrcChannel::UL_CCCH1: {
-        auto *pdu = rrc::encode::Decode<ASN_RRC_UL_CCCH1_Message>(asn_DEF_ASN_RRC_UL_CCCH1_Message, rrcPdu);
-        if (pdu == nullptr)
-            m_logger->err("RRC UL-CCCH1 PDU decoding failed.");
-        else
-            receiveRrcMessage(pdu);
-        asn::Free(asn_DEF_ASN_RRC_UL_CCCH1_Message, pdu);
-        break;
-    }
-    case rrc::RrcChannel::UL_DCCH: {
-        auto *pdu = rrc::encode::Decode<ASN_RRC_UL_DCCH_Message>(asn_DEF_ASN_RRC_UL_DCCH_Message, rrcPdu);
-        if (pdu == nullptr)
-            m_logger->err("RRC UL-DCCH PDU decoding failed.");
-        else
-            receiveRrcMessage(pdu);
-        asn::Free(asn_DEF_ASN_RRC_UL_DCCH_Message, pdu);
-        break;
-    }
-    }
 }
 
-void UeRrcTask::sendRrcMessage(ASN_RRC_BCCH_BCH_Message *msg)
-{
-    OctetString pdu = rrc::encode::EncodeS(asn_DEF_ASN_RRC_BCCH_BCH_Message, msg);
-    if (pdu.length() == 0)
-    {
-        m_logger->err("RRC BCCH-BCH encoding failed.");
-        return;
-    }
-
-    auto *nw = new NwUeRrcToMr(NwUeRrcToMr::RRC_PDU_DELIVERY);
-    nw->channel = rrc::RrcChannel::BCCH_BCH;
-    nw->pdu = std::move(pdu);
-    m_base->mrTask->push(nw);
-}
-
-void UeRrcTask::sendRrcMessage(ASN_RRC_BCCH_DL_SCH_Message *msg)
-{
-    OctetString pdu = rrc::encode::EncodeS(asn_DEF_ASN_RRC_BCCH_DL_SCH_Message, msg);
-    if (pdu.length() == 0)
-    {
-        m_logger->err("RRC BCCH-DL-SCH encoding failed.");
-        return;
-    }
-
-    auto *nw = new NwUeRrcToMr(NwUeRrcToMr::RRC_PDU_DELIVERY);
-    nw->channel = rrc::RrcChannel::BCCH_DL_SCH;
-    nw->pdu = std::move(pdu);
-    m_base->mrTask->push(nw);
-}
-
-void UeRrcTask::sendRrcMessage(ASN_RRC_DL_CCCH_Message *msg)
-{
-    OctetString pdu = rrc::encode::EncodeS(asn_DEF_ASN_RRC_DL_CCCH_Message, msg);
-    if (pdu.length() == 0)
-    {
-        m_logger->err("RRC DL-CCCH encoding failed.");
-        return;
-    }
-
-    auto *nw = new NwUeRrcToMr(NwUeRrcToMr::RRC_PDU_DELIVERY);
-    nw->channel = rrc::RrcChannel::DL_CCCH;
-    nw->pdu = std::move(pdu);
-    m_base->mrTask->push(nw);
-}
-
-void UeRrcTask::sendRrcMessage(ASN_RRC_DL_DCCH_Message *msg)
-{
-    OctetString pdu = rrc::encode::EncodeS(asn_DEF_ASN_RRC_DL_DCCH_Message, msg);
-    if (pdu.length() == 0)
-    {
-        m_logger->err("RRC DL-DCCH encoding failed.");
-        return;
-    }
-
-    auto *nw = new NwUeRrcToMr(NwUeRrcToMr::RRC_PDU_DELIVERY);
-    nw->channel = rrc::RrcChannel::DL_DCCH;
-    nw->pdu = std::move(pdu);
-    m_base->mrTask->push(nw);
-}
-
-void UeRrcTask::sendRrcMessage(ASN_RRC_PCCH_Message *msg)
-{
-    OctetString pdu = rrc::encode::EncodeS(asn_DEF_ASN_RRC_PCCH_Message, msg);
-    if (pdu.length() == 0)
-    {
-        m_logger->err("RRC PCCH encoding failed.");
-        return;
-    }
-
-    auto *nw = new NwUeRrcToMr(NwUeRrcToMr::RRC_PDU_DELIVERY);
-    nw->channel = rrc::RrcChannel::PCCH;
-    nw->pdu = std::move(pdu);
-    m_base->mrTask->push(nw);
-}
-
-void UeRrcTask::sendRrcMessage(ASN_RRC_UL_CCCH_Message *msg)
+void UeRrcTask::sendRrcMessage(int cellId, ASN_RRC_UL_CCCH_Message *msg)
 {
     OctetString pdu = rrc::encode::EncodeS(asn_DEF_ASN_RRC_UL_CCCH_Message, msg);
     if (pdu.length() == 0)
@@ -182,13 +93,14 @@ void UeRrcTask::sendRrcMessage(ASN_RRC_UL_CCCH_Message *msg)
         return;
     }
 
-    auto *nw = new NwUeRrcToMr(NwUeRrcToMr::RRC_PDU_DELIVERY);
-    nw->channel = rrc::RrcChannel::UL_CCCH;
-    nw->pdu = std::move(pdu);
-    m_base->mrTask->push(nw);
+    auto *m = new NmUeRrcToRls(NmUeRrcToRls::RRC_PDU_DELIVERY);
+    m->cellId = cellId;
+    m->channel = rrc::RrcChannel::UL_CCCH;
+    m->pdu = std::move(pdu);
+    m_base->rlsTask->push(m);
 }
 
-void UeRrcTask::sendRrcMessage(ASN_RRC_UL_CCCH1_Message *msg)
+void UeRrcTask::sendRrcMessage(int cellId, ASN_RRC_UL_CCCH1_Message *msg)
 {
     OctetString pdu = rrc::encode::EncodeS(asn_DEF_ASN_RRC_UL_CCCH1_Message, msg);
     if (pdu.length() == 0)
@@ -197,10 +109,11 @@ void UeRrcTask::sendRrcMessage(ASN_RRC_UL_CCCH1_Message *msg)
         return;
     }
 
-    auto *nw = new NwUeRrcToMr(NwUeRrcToMr::RRC_PDU_DELIVERY);
-    nw->channel = rrc::RrcChannel::UL_CCCH1;
-    nw->pdu = std::move(pdu);
-    m_base->mrTask->push(nw);
+    auto *m = new NmUeRrcToRls(NmUeRrcToRls::RRC_PDU_DELIVERY);
+    m->cellId = cellId;
+    m->channel = rrc::RrcChannel::UL_CCCH1;
+    m->pdu = std::move(pdu);
+    m_base->rlsTask->push(m);
 }
 
 void UeRrcTask::sendRrcMessage(ASN_RRC_UL_DCCH_Message *msg)
@@ -212,23 +125,36 @@ void UeRrcTask::sendRrcMessage(ASN_RRC_UL_DCCH_Message *msg)
         return;
     }
 
-    auto *nw = new NwUeRrcToMr(NwUeRrcToMr::RRC_PDU_DELIVERY);
-    nw->channel = rrc::RrcChannel::UL_DCCH;
-    nw->pdu = std::move(pdu);
-    m_base->mrTask->push(nw);
+    auto *m = new NmUeRrcToRls(NmUeRrcToRls::RRC_PDU_DELIVERY);
+    m->cellId = m_base->shCtx.currentCell.get<int>([](auto &value) { return value.cellId; });
+    m->channel = rrc::RrcChannel::UL_DCCH;
+    m->pdu = std::move(pdu);
+    m_base->rlsTask->push(m);
 }
 
-void UeRrcTask::receiveRrcMessage(ASN_RRC_BCCH_BCH_Message *msg)
+void UeRrcTask::receiveRrcMessage(int cellId, ASN_RRC_BCCH_BCH_Message *msg)
 {
-    // TODO
+    if (msg->message.present == ASN_RRC_BCCH_BCH_MessageType_PR_mib)
+        receiveMib(cellId, *msg->message.choice.mib);
 }
 
-void UeRrcTask::receiveRrcMessage(ASN_RRC_BCCH_DL_SCH_Message *msg)
+void UeRrcTask::receiveRrcMessage(int cellId, ASN_RRC_BCCH_DL_SCH_Message *msg)
 {
-    // TODO
+    if (msg->message.present != ASN_RRC_BCCH_DL_SCH_MessageType_PR_c1)
+        return;
+
+    auto &c1 = msg->message.choice.c1;
+    switch (c1->present)
+    {
+    case ASN_RRC_BCCH_DL_SCH_MessageType__c1_PR_systemInformationBlockType1:
+        receiveSib1(cellId, *c1->choice.systemInformationBlockType1);
+        break;
+    default:
+        break;
+    }
 }
 
-void UeRrcTask::receiveRrcMessage(ASN_RRC_DL_CCCH_Message *msg)
+void UeRrcTask::receiveRrcMessage(int cellId, ASN_RRC_DL_CCCH_Message *msg)
 {
     if (msg->message.present != ASN_RRC_DL_CCCH_MessageType_PR_c1)
         return;
@@ -237,10 +163,10 @@ void UeRrcTask::receiveRrcMessage(ASN_RRC_DL_CCCH_Message *msg)
     switch (c1->present)
     {
     case ASN_RRC_DL_CCCH_MessageType__c1_PR_rrcReject:
-        receiveRrcReject(*c1->choice.rrcReject);
+        receiveRrcReject(cellId, *c1->choice.rrcReject);
         break;
     case ASN_RRC_DL_CCCH_MessageType__c1_PR_rrcSetup:
-        receiveRrcSetup(*c1->choice.rrcSetup);
+        receiveRrcSetup(cellId, *c1->choice.rrcSetup);
         break;
     default:
         break;
@@ -268,37 +194,18 @@ void UeRrcTask::receiveRrcMessage(ASN_RRC_DL_DCCH_Message *msg)
 
 void UeRrcTask::receiveRrcMessage(ASN_RRC_PCCH_Message *msg)
 {
-    // TODO
-}
-
-void UeRrcTask::receiveRrcMessage(ASN_RRC_UL_CCCH_Message *msg)
-{
-    if (msg->message.present != ASN_RRC_UL_CCCH_MessageType_PR_c1)
+    if (msg->message.present != ASN_RRC_PCCH_MessageType_PR_c1)
         return;
 
     auto &c1 = msg->message.choice.c1;
     switch (c1->present)
     {
-    case ASN_RRC_UL_CCCH_MessageType__c1_PR_NOTHING:
+    case ASN_RRC_PCCH_MessageType__c1_PR_paging:
+        receivePaging(*c1->choice.paging);
         break;
-    case ASN_RRC_UL_CCCH_MessageType__c1_PR_rrcSetupRequest:
-        break; // todo
-    case ASN_RRC_UL_CCCH_MessageType__c1_PR_rrcResumeRequest:
-        break; // todo
-    case ASN_RRC_UL_CCCH_MessageType__c1_PR_rrcReestablishmentRequest:
-        break; // todo
-    case ASN_RRC_UL_CCCH_MessageType__c1_PR_rrcSystemInfoRequest:
-        break; // todo
+    default:
+        break;
     }
-}
-
-void UeRrcTask::receiveRrcMessage(ASN_RRC_UL_CCCH1_Message *msg)
-{
-    // TODO
-}
-
-void UeRrcTask::receiveRrcMessage(ASN_RRC_UL_DCCH_Message *msg)
-{
 }
 
 } // namespace nr::ue

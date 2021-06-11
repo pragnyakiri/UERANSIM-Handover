@@ -9,12 +9,12 @@
 #pragma once
 
 #include "octet.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
 
-// TODO: implement MemoryBlock and use it for decoders etc. instead of this.
 class OctetString
 {
   private:
@@ -40,11 +40,13 @@ class OctetString
     void appendOctet(int v);
     void appendOctet(int bigHalf, int littleHalf);
     void appendOctet2(octet2 v);
+    void appendOctet2(uint16_t v);
     void appendOctet2(int v);
     void appendOctet3(octet3 v);
     void appendOctet3(int v);
     void appendOctet4(octet4 v);
     void appendOctet4(int v);
+    void appendOctet4(uint32_t v);
     void appendOctet8(octet8 v);
     void appendOctet8(int64_t v);
     void appendOctet8(uint64_t v);

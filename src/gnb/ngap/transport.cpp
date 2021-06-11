@@ -9,11 +9,12 @@
 #include "encode.hpp"
 #include "task.hpp"
 #include "utils.hpp"
-#include <asn/utils/ngap.hpp>
-#include <asn/utils/utils.hpp>
+
 #include <gnb/app/task.hpp>
 #include <gnb/nts.hpp>
 #include <gnb/sctp/task.hpp>
+#include <lib/asn/ngap.hpp>
+#include <lib/asn/utils.hpp>
 
 #include <asn/ngap/ASN_NGAP_AMF-UE-NGAP-ID.h>
 #include <asn/ngap/ASN_NGAP_InitiatingMessage.h>
@@ -24,6 +25,61 @@
 #include <asn/ngap/ASN_NGAP_UnsuccessfulOutcome.h>
 #include <asn/ngap/ASN_NGAP_UserLocationInformation.h>
 #include <asn/ngap/ASN_NGAP_UserLocationInformationNR.h>
+
+static e_ASN_NGAP_Criticality FindCriticalityOfUserIe(ASN_NGAP_NGAP_PDU *pdu, ASN_NGAP_ProtocolIE_ID_t ieId)
+{
+    auto procedureCode =
+        pdu->present == ASN_NGAP_NGAP_PDU_PR_initiatingMessage   ? pdu->choice.initiatingMessage->procedureCode
+        : pdu->present == ASN_NGAP_NGAP_PDU_PR_successfulOutcome ? pdu->choice.successfulOutcome->procedureCode
+                                                                 : pdu->choice.unsuccessfulOutcome->procedureCode;
+
+    if (ieId == ASN_NGAP_ProtocolIE_ID_id_UserLocationInformation)
+    {
+        return procedureCode == ASN_NGAP_ProcedureCode_id_InitialUEMessage ? ASN_NGAP_Criticality_reject
+                                                                           : ASN_NGAP_Criticality_ignore;
+    }
+
+    if (ieId == ASN_NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID || ieId == ASN_NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID)
+    {
+        if (procedureCode == ASN_NGAP_ProcedureCode_id_RerouteNASRequest)
+        {
+            return ieId == ASN_NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID ? ASN_NGAP_Criticality_reject
+                                                                    : ASN_NGAP_Criticality_ignore;
+        }
+
+        if (pdu->present == ASN_NGAP_NGAP_PDU_PR_initiatingMessage)
+        {
+            if (procedureCode == ASN_NGAP_ProcedureCode_id_UEContextReleaseRequest ||
+                procedureCode == ASN_NGAP_ProcedureCode_id_HandoverPreparation)
+                return ASN_NGAP_Criticality_reject;
+        }
+
+        if (procedureCode == ASN_NGAP_ProcedureCode_id_PDUSessionResourceNotify ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_PDUSessionResourceModifyIndication ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_RRCInactiveTransitionReport ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_HandoverNotification ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_PathSwitchRequest ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_HandoverCancel ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_UplinkRANStatusTransfer ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_InitialUEMessage ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_DownlinkNASTransport ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_UplinkNASTransport ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_NASNonDeliveryIndication ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_UplinkUEAssociatedNRPPaTransport ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_UplinkNonUEAssociatedNRPPaTransport ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_CellTrafficTrace ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_TraceStart ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_DeactivateTrace ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_TraceFailureIndication ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_LocationReport ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_LocationReportingControl ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_LocationReportingFailureIndication ||
+            procedureCode == ASN_NGAP_ProcedureCode_id_UERadioCapabilityInfoIndication)
+            return ASN_NGAP_Criticality_reject;
+    }
+
+    return ASN_NGAP_Criticality_ignore;
+}
 
 namespace nr::gnb
 {
@@ -53,7 +109,7 @@ void NgapTask::sendNgapNonUe(int associatedAmf, ASN_NGAP_NGAP_PDU *pdu)
         m_logger->err("NGAP APER encoding failed");
     else
     {
-        auto *msg = new NwGnbSctp(NwGnbSctp::SEND_MESSAGE);
+        auto *msg = new NmGnbSctp(NmGnbSctp::SEND_MESSAGE);
         msg->clientId = amf->ctxId;
         msg->stream = 0;
         msg->buffer = UniqueBuffer{buffer, static_cast<size_t>(encoded)};
@@ -95,22 +151,22 @@ void NgapTask::sendNgapUeAssociated(int ueId, ASN_NGAP_NGAP_PDU *pdu)
     {
         if (ue->amfUeNgapId > 0)
         {
-            asn::ngap::AddProtocolIeIfUsable(*pdu, asn_DEF_ASN_NGAP_AMF_UE_NGAP_ID,
-                                             ASN_NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID, ASN_NGAP_Criticality_reject,
-                                             [ue](void *mem) {
-                                                 auto &id = *reinterpret_cast<ASN_NGAP_AMF_UE_NGAP_ID_t *>(mem);
-                                                 asn::SetSigned64(ue->amfUeNgapId, id);
-                                             });
+            asn::ngap::AddProtocolIeIfUsable(
+                *pdu, asn_DEF_ASN_NGAP_AMF_UE_NGAP_ID, ASN_NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID,
+                FindCriticalityOfUserIe(pdu, ASN_NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID), [ue](void *mem) {
+                    auto &id = *reinterpret_cast<ASN_NGAP_AMF_UE_NGAP_ID_t *>(mem);
+                    asn::SetSigned64(ue->amfUeNgapId, id);
+                });
         }
 
         asn::ngap::AddProtocolIeIfUsable(
             *pdu, asn_DEF_ASN_NGAP_RAN_UE_NGAP_ID, ASN_NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID,
-            ASN_NGAP_Criticality_reject,
+            FindCriticalityOfUserIe(pdu, ASN_NGAP_ProtocolIE_ID_id_RAN_UE_NGAP_ID),
             [ue](void *mem) { *reinterpret_cast<ASN_NGAP_RAN_UE_NGAP_ID_t *>(mem) = ue->ranUeNgapId; });
 
         asn::ngap::AddProtocolIeIfUsable(
             *pdu, asn_DEF_ASN_NGAP_UserLocationInformation, ASN_NGAP_ProtocolIE_ID_id_UserLocationInformation,
-            ASN_NGAP_Criticality_ignore, [this](void *mem) {
+            FindCriticalityOfUserIe(pdu, ASN_NGAP_ProtocolIE_ID_id_UserLocationInformation), [this](void *mem) {
                 auto *loc = reinterpret_cast<ASN_NGAP_UserLocationInformation *>(mem);
                 loc->present = ASN_NGAP_UserLocationInformation_PR_userLocationInformationNR;
                 loc->choice.userLocationInformationNR = asn::New<ASN_NGAP_UserLocationInformationNR>();
@@ -144,7 +200,7 @@ void NgapTask::sendNgapUeAssociated(int ueId, ASN_NGAP_NGAP_PDU *pdu)
         m_logger->err("NGAP APER encoding failed");
     else
     {
-        auto *msg = new NwGnbSctp(NwGnbSctp::SEND_MESSAGE);
+        auto *msg = new NmGnbSctp(NmGnbSctp::SEND_MESSAGE);
         msg->clientId = amf->ctxId;
         msg->stream = ue->uplinkStream;
         msg->buffer = UniqueBuffer{buffer, static_cast<size_t>(encoded)};
@@ -229,6 +285,12 @@ void NgapTask::handleSctpMessage(int amfId, uint16_t stream, const UniqueBuffer 
             break;
         case ASN_NGAP_InitiatingMessage__value_PR_OverloadStop:
             receiveOverloadStop(amf->ctxId, &value.choice.OverloadStop);
+            break;
+        case ASN_NGAP_InitiatingMessage__value_PR_PDUSessionResourceReleaseCommand:
+            receiveSessionResourceReleaseCommand(amf->ctxId, &value.choice.PDUSessionResourceReleaseCommand);
+            break;
+        case ASN_NGAP_InitiatingMessage__value_PR_Paging:
+            receivePaging(amf->ctxId, &value.choice.Paging);
             break;
         default:
             m_logger->err("Unhandled NGAP initiating-message received (%d)", value.present);

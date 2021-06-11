@@ -63,11 +63,6 @@ class OctetView
         return octet2{read(), read()};
     }
 
-    inline int16_t read2S() const
-    {
-        return (int16_t)read2();
-    }
-
     inline uint16_t read2US() const
     {
         return (uint16_t)read2();
@@ -129,6 +124,8 @@ class OctetView
     }
 
     OctetString readOctetString(int length) const;
+    OctetString readOctetString(size_t length) const;
     OctetString readOctetString() const;
     std::string readUtf8String(int length) const;
+    std::string readUtf8String(size_t length) const;
 };

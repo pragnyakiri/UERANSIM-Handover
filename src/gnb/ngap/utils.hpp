@@ -8,12 +8,11 @@
 
 #pragma once
 
-#include <asn/utils/ngap.hpp>
-#include <asn/utils/utils.hpp>
+#include <gnb/types.hpp>
+#include <lib/asn/ngap.hpp>
+#include <lib/asn/utils.hpp>
 #include <utils/common.hpp>
 #include <utils/common_types.hpp>
-
-#include <gnb/types.hpp>
 
 #include <asn/ngap/ASN_NGAP_Cause.h>
 #include <asn/ngap/ASN_NGAP_GUAMI.h>
@@ -35,7 +34,7 @@ void GuamiFromAsn_Ref(const ASN_NGAP_GUAMI_t &guami, Guami &target);
 void ToCauseAsn_Ref(NgapCause source, ASN_NGAP_Cause_t &target);
 void ToPlmnAsn_Ref(const Plmn &source, ASN_NGAP_PLMNIdentity_t &target);
 
-std::unique_ptr<SliceSupport> SliceSupportFromAsn_Unique(ASN_NGAP_SliceSupportItem &supportItem);
+SingleSlice SliceSupportFromAsn(ASN_NGAP_SliceSupportItem &supportItem);
 
 NgapIdPair FindNgapIdPairFromAsnNgapIds(const ASN_NGAP_UE_NGAP_IDs &ngapIDs);
 

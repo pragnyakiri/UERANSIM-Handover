@@ -14,11 +14,11 @@ struct cons
 {
     // Version information
     static constexpr const uint8_t Major = 3;
-    static constexpr const uint8_t Minor = 1;
-    static constexpr const uint8_t Patch = 1;
+    static constexpr const uint8_t Minor = 2;
+    static constexpr const uint8_t Patch = 0;
     static constexpr const char *Project = "UERANSIM";
-    static constexpr const char *Tag = "v3.1.1";
-    static constexpr const char *Name = "UERANSIM v3.1.1";
+    static constexpr const char *Tag = "v3.2.0";
+    static constexpr const char *Name = "UERANSIM v3.2.0";
     static constexpr const char *Owner = "ALİ GÜNGÖR";
 
     // Some port values
@@ -27,6 +27,7 @@ struct cons
 
     // TUN interface
     static constexpr const char *TunNamePrefix = "uesimtun";
+    static constexpr const int TunMtu = 1400;
 
     // Constraints
     static constexpr const int MinNodeName = 3;

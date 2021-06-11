@@ -7,7 +7,8 @@
 //
 
 #include "keys.hpp"
-#include <crypt/crypt.hpp>
+#include <lib/crypt/crypt.hpp>
+#include <stdexcept>
 
 static const int N_NAS_enc_alg = 0x01;
 static const int N_NAS_int_alg = 0x02;
@@ -19,10 +20,10 @@ static const int N_UP_int_alg = 0x06;
 namespace nr::ue::keys
 {
 
-void DeriveKeysSeafAmf(const UeConfig &ueConfig, NasSecurityContext &nasSecurityContext)
+void DeriveKeysSeafAmf(const UeConfig &ueConfig, const Plmn &currentPlmn, NasSecurityContext &nasSecurityContext)
 {
     auto &keys = nasSecurityContext.keys;
-    std::string snn = ConstructServingNetworkName(ueConfig.plmn);
+    std::string snn = ConstructServingNetworkName(currentPlmn);
 
     OctetString s1[1];
     s1[0] = crypto::EncodeKdfString(snn);
@@ -80,7 +81,6 @@ std::pair<OctetString, OctetString> CalculateCkPrimeIkPrime(const OctetString &c
     s[1] = sqnXorAk.copy();
 
     auto res = crypto::CalculateKdfKey(key, 0x20, s, 2);
-    ;
 
     std::pair<OctetString, OctetString> ckIk;
     ckIk.first = res.subCopy(0, ck.length());
@@ -136,6 +136,22 @@ OctetString CalculateResStar(const OctetString &key, const std::string &snn, con
 
     // The (X)RES* is identified with the 128 least significant bits of the output of the KDF.
     return output.subCopy(output.length() - 16);
+}
+
+OctetString DeriveAmfPrimeInMobility(bool isUplink, const NasCount &count, const OctetString &kAmf)
+{
+    OctetString params[2];
+    params[0] = OctetString::FromOctet(isUplink ? 0x00 : 0x01);
+    params[1] = OctetString::FromOctet4(count.toOctet4());
+
+    return crypto::CalculateKdfKey(kAmf, 0x72, params, 2);
+}
+
+OctetString CalculateAuts(const OctetString &sqn, const OctetString &ak, const OctetString &macS)
+{
+    OctetString auts = OctetString::Xor(sqn, ak);
+    auts.append(macS);
+    return auts;
 }
 
 } // namespace nr::ue::keys

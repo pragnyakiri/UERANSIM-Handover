@@ -12,6 +12,8 @@
 #include "octet.hpp"
 #include "octet_string.hpp"
 #include "time_stamp.hpp"
+
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -30,6 +32,8 @@ TimeStamp CurrentTimeStamp();
 int NextId();
 int ParseInt(const std::string &str);
 int ParseInt(const char *str);
+bool TryParseInt(const std::string &str, int &output);
+bool TryParseInt(const char *str, int &output);
 uint64_t Random64();
 void Sleep(int ms);
 bool IsRoot();
@@ -46,6 +50,12 @@ inline void ClearAndDelete(std::vector<T *> &vector)
     vector.clear();
 }
 
+template <typename T, typename P>
+inline void EraseWhere(std::vector<T> &vector, P predicate)
+{
+    vector.erase(std::remove_if(vector.begin(), vector.end(), std::forward<P>(predicate)), vector.end());
+}
+
 template <typename T>
 static std::string IntToHex(T i)
 {
@@ -55,6 +65,13 @@ static std::string IntToHex(T i)
     else
         stream << std::setfill('0') << std::setw(sizeof(T) * 2) << std::hex << i;
     return stream.str();
+}
+
+template <class T>
+inline void HashCombine(std::size_t &seed, const T &v)
+{
+    std::hash<T> hasher{};
+    seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
 } // namespace utils
