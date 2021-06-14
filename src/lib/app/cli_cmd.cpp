@@ -152,7 +152,7 @@ static OrderedMap<std::string, CmdEntry> g_gnbCmdEntries = {
     {"ue-list", {"List all UEs associated with the gNB", "", DefaultDesc, false}},
     {"ue-count", {"Print the total number of UEs connected the this gNB", "", DefaultDesc, false}},
     {"ue-release", {"Request a UE context release for the given UE", "<ue-id>", DefaultDesc, false}},
-    {"handover", {"Perform handover for the given UE", "<ue-id>", DefaultDesc, false}},
+    {"handover", {"Perform handover for the given UE", "<ue-id>", DefaultDesc, false}}, // Pradnya
     {"handover-prepare", {"Prepare for handover for the given UE", "<ue-id>", DefaultDesc, false}},
 };
 
@@ -237,7 +237,6 @@ static std::unique_ptr<GnbCliCommand> GnbCliParseImpl(const std::string &subCmd,
         return cmd;
         //return std::make_unique<GnbCliCommand>(GnbCliCommand::);
     }
-
     return nullptr;
 }
 

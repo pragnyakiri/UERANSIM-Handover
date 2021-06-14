@@ -156,7 +156,8 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         }
         break;
     }
-   case app::GnbCliCommand::HANDOVERPREPARE: {
+    // Pradnya
+    case app::GnbCliCommand::HANDOVERPREPARE: {
         int ueid = msg.cmd->ueid;
         std::cout << " ueid: "<< ueid << std::endl;
         m_base->ngapTask->handoverPreparation(ueid);

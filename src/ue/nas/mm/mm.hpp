@@ -58,7 +58,7 @@ class NasMm
     // Indicates registered for emergency services (Only meaningful in RM-REGISTERED state, or implies the last one)
     bool m_registeredForEmergency{};
     // Network feature support information
-    nas::IE5gsNetworkFeatureSupport m_nwFeatureSupport{};
+    std::optional<nas::IE5gsNetworkFeatureSupport> m_nwFeatureSupport{};
     // Number of times the network failing the authentication check
     int m_nwConsecutiveAuthFailure{};
     // Last time PLMN search failure logged
@@ -101,7 +101,7 @@ class NasMm
 
   private: /* Transport */
     void receiveDlNasTransport(const nas::DlNasTransport &msg);
-    EProcRc deliverUlTransport(const nas::UlNasTransport &msg);
+    EProcRc deliverUlTransport(const nas::UlNasTransport &msg, ENasTransportHint hint);
 
   private: /* Registration */
     EProcRc sendInitialRegistration(EInitialRegCause regCause);
@@ -174,6 +174,7 @@ class NasMm
     bool hasEmergency();
     void setN1Capability(bool enabled);
     bool isInNonAllowedArea();
+    EUacResult performUac();
 
   private: /* eCall */
     bool startECallInactivityIfNeeded();

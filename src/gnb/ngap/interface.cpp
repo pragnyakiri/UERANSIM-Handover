@@ -30,6 +30,7 @@
 #include <asn/ngap/ASN_NGAP_ServedGUAMIItem.h>
 #include <asn/ngap/ASN_NGAP_SliceSupportItem.h>
 #include <asn/ngap/ASN_NGAP_SupportedTAItem.h>
+// Pradnya
 #include <asn/ngap/ASN_NGAP_UserLocationInformationNR.h>
 //#include <asn/ngap/ASN_NGAP_PDUSessionResourceToBeSwitchedDLList.h>
 #include <asn/ngap/ASN_NGAP_PDUSessionResourceToBeSwitchedDLItem.h>
@@ -285,6 +286,7 @@ void NgapTask::handoverPreparation(int ueId)
 
 }
 
+// Pradnya
 void NgapTask::handleXnHandover(int asAmfId, int64_t amfUeNgapId, int64_t ranUeNgapId, int ctxtId, int ulStr, std::string amf_name)
 {
 
@@ -406,7 +408,6 @@ void NgapTask::handleXnHandover(int asAmfId, int64_t amfUeNgapId, int64_t ranUeN
     asn::Free(asn_DEF_ASN_NGAP_NGAP_PDU, pdu);
 
 }
-
 
 void NgapTask::receiveAmfConfigurationUpdate(int amfId, ASN_NGAP_AMFConfigurationUpdate *msg)
 {

@@ -39,7 +39,7 @@ struct GnbCliCommand
     // UE_RELEASE_REQ
     int ueId{};
 
-    // Pradnya
+     // Pradnya
     // HANDOVERPREPARE
     int ueid{};
 
@@ -50,7 +50,7 @@ struct GnbCliCommand
     int ctxtId{};
     int ulStr{};
     std::string amf_name{};
-
+    
     explicit GnbCliCommand(PR present) : present(present)
     {
     }

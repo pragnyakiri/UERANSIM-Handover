@@ -2,7 +2,7 @@
   <a href="https://github.com/aligungr/UERANSIM"><img src="/.github/logo.png" width="75" title="UERANSIM"></a>
 </p>
 <p align="center">
-<img src="https://img.shields.io/badge/UERANSIM-v3.2.0-blue" />
+<img src="https://img.shields.io/badge/UERANSIM-v3.2.1-blue" />
 <img src="https://img.shields.io/badge/3GPP-R15-orange" />
 <img src="https://img.shields.io/badge/License-GPL--3.0-green"/>
 </p>
@@ -46,12 +46,16 @@ Any contributions you make are greatly appreciated via [Pull Request](https://gi
 
 You can support UERANSIM by:
 
+- Starring the GitHub repository,
 - Donating on [Open Collective](https://opencollective.com/UERANSIM)
-- Starring our GitHub repository,
 - Creating pull requests, submitting bugs, suggesting new features or documentation updates.
 
 ## License
 
-Copyright (c) 2021 ALİ GÜNGÖR. All source code and related files including documentation and wiki pages are licensed
+Copyright (c) 2021 ALİ GÜNGÖR.
+
+All source code and related files including documentation and wiki pages are licensed
 under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.en.html),
-see [LICENSE](https://github.com/aligungr/UERANSIM/blob/master/LICENSE) for more details.
+see [LICENSE](https://github.com/aligungr/UERANSIM/blob/master/LICENSE).
+
+**Commercial Usage**: If you want to use UERANSIM for commercial purposes, please contact [ueransim@gmail.com](mailto:ueransim@gmail.com) to obtain a commercial license.

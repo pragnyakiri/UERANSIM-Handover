@@ -105,6 +105,22 @@ struct UeConfig
     NetworkSlice defaultConfiguredNssai{};
     NetworkSlice configuredNssai{};
 
+    struct
+    {
+        bool mps{};
+        bool mcs{};
+    } uacAic;
+
+    struct
+    {
+        int normalCls{}; // [0..9]
+        bool cls11{};
+        bool cls12{};
+        bool cls13{};
+        bool cls14{};
+        bool cls15{};
+    } uacAcc;
+
     /* Assigned by program */
     bool configureRouting{};
     bool prefixLogger{};
@@ -555,6 +571,49 @@ struct ProcControl
     std::optional<ERegUpdateCause> mobilityRegistration{};
     std::optional<EServiceReqCause> serviceRequest{};
     std::optional<EDeregCause> deregistration{};
+};
+
+struct UacInput
+{
+    std::bitset<16> identities;
+    int category{};
+    int establishmentCause{};
+};
+
+enum class EUacResult
+{
+    ALLOWED,
+    BARRED,
+    BARRING_APPLICABLE_EXCEPT_0_2,
+};
+
+struct UacOutput
+{
+    EUacResult res{};
+};
+
+enum class ENasTransportHint
+{
+    PDU_SESSION_ESTABLISHMENT_REQUEST,
+    PDU_SESSION_ESTABLISHMENT_ACCEPT,
+    PDU_SESSION_ESTABLISHMENT_REJECT,
+
+    PDU_SESSION_AUTHENTICATION_COMMAND,
+    PDU_SESSION_AUTHENTICATION_COMPLETE,
+    PDU_SESSION_AUTHENTICATION_RESULT,
+
+    PDU_SESSION_MODIFICATION_REQUEST,
+    PDU_SESSION_MODIFICATION_REJECT,
+    PDU_SESSION_MODIFICATION_COMMAND,
+    PDU_SESSION_MODIFICATION_COMPLETE,
+    PDU_SESSION_MODIFICATION_COMMAND_REJECT,
+
+    PDU_SESSION_RELEASE_REQUEST,
+    PDU_SESSION_RELEASE_REJECT,
+    PDU_SESSION_RELEASE_COMMAND,
+    PDU_SESSION_RELEASE_COMPLETE,
+
+    FIVEG_SM_STATUS
 };
 
 Json ToJson(const ECmState &state);
