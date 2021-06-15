@@ -139,6 +139,7 @@ void NgapTask::receiveSessionResourceSetupRequest(int amfId, ASN_NGAP_PDUSession
                     auto *associatedQosFlowItem = asn::New<ASN_NGAP_AssociatedQosFlowItem>();
                     associatedQosFlowItem->qosFlowIdentifier = qosList.array[iQos]->qosFlowIdentifier;
                     asn::SequenceAdd(tr->dLQosFlowPerTNLInformation.associatedQosFlowList, associatedQosFlowItem);
+                    m_logger->debug("QoS Flow ID : %d",associatedQosFlowItem->qosFlowIdentifier);
                 }
 
                 auto &upInfo = tr->dLQosFlowPerTNLInformation.uPTransportLayerInformation;
@@ -146,6 +147,10 @@ void NgapTask::receiveSessionResourceSetupRequest(int amfId, ASN_NGAP_PDUSession
                 upInfo.choice.gTPTunnel = asn::New<ASN_NGAP_GTPTunnel>();
                 asn::SetBitString(upInfo.choice.gTPTunnel->transportLayerAddress, resource->downTunnel.address);
                 asn::SetOctetString4(upInfo.choice.gTPTunnel->gTP_TEID, (octet4)resource->downTunnel.teid);
+
+                m_logger->debug("PDU session id : %d",resource->psi);
+                m_logger->debug("TEID : %d",resource->downTunnel.teid);
+                m_logger->debug("Tunnel address : %d", *(resource->downTunnel.address.data()+3));
 
                 OctetString encodedTr =
                     ngap_encode::EncodeS(asn_DEF_ASN_NGAP_PDUSessionResourceSetupResponseTransfer, tr);
