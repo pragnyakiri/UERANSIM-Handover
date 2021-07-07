@@ -126,6 +126,16 @@ EProcRc NasMm::sendNasMessage(const nas::PlainMmMessage &msg)
     OctetString pdu;
     if (hasNsCtx)
     {
+        if (m_usim->m_currentNsCtx->uplinkCount.sqn == 0xFF &&
+            static_cast<int>(m_usim->m_currentNsCtx->uplinkCount.overflow) == 0xFFFF)
+        {
+            m_logger->warn("Uplink NAS Count about to wrap around, performing local release of NAS connection and "
+                           "deleting current NSC");
+            m_usim->m_currentNsCtx = nullptr;
+            localReleaseConnection(false);
+            return EProcRc::STAY;
+        }
+
         if (msg.messageType == nas::EMessageType::REGISTRATION_REQUEST ||
             msg.messageType == nas::EMessageType::SERVICE_REQUEST)
         {
@@ -243,6 +253,15 @@ void NasMm::receiveNasMessage(const nas::NasMessage &msg)
         return;
     }
 
+    if (m_usim->m_currentNsCtx->integrity != nas::ETypeOfIntegrityProtectionAlgorithm::IA0)
+    {
+        if (!checkForReplay(securedMm))
+        {
+            m_logger->warn("Replayed NAS message detected, discarding the message");
+            return;
+        }
+    }
+
     auto decrypted = nas_enc::Decrypt(*m_usim->m_currentNsCtx, securedMm);
     if (decrypted == nullptr)
     {
@@ -338,6 +357,21 @@ void NasMm::sendMmStatus(nas::EMmCause cause)
 void NasMm::receiveMmStatus(const nas::FiveGMmStatus &msg)
 {
     m_logger->err("MM status received with cause [%s]", nas::utils::EnumToString(msg.mmCause.value));
+}
+
+bool NasMm::checkForReplay(const nas::SecuredMmMessage &msg)
+{
+    int n = static_cast<int>(msg.sequenceNumber);
+
+    for (int seq : m_lastNasSequenceNums)
+        if (seq == n)
+            return false;
+
+    m_lastNasSequenceNums.push_back(n);
+    while (m_lastNasSequenceNums.size() > 16)
+        m_lastNasSequenceNums.pop_front();
+
+    return true;
 }
 
 } // namespace nr::ue

@@ -237,6 +237,7 @@ static std::unique_ptr<GnbCliCommand> GnbCliParseImpl(const std::string &subCmd,
         return cmd;
         //return std::make_unique<GnbCliCommand>(GnbCliCommand::);
     }
+ 
     return nullptr;
 }
 

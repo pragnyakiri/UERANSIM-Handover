@@ -8,7 +8,7 @@
 
 #include "task.hpp"
 #include "utils.hpp"
-#include "encode.hpp"
+
 #include <algorithm>
 
 #include <gnb/app/task.hpp>
@@ -31,6 +31,7 @@
 #include <asn/ngap/ASN_NGAP_SliceSupportItem.h>
 #include <asn/ngap/ASN_NGAP_SupportedTAItem.h>
 // Pradnya
+#include "encode.hpp"
 #include <asn/ngap/ASN_NGAP_UserLocationInformationNR.h>
 //#include <asn/ngap/ASN_NGAP_PDUSessionResourceToBeSwitchedDLList.h>
 #include <asn/ngap/ASN_NGAP_PDUSessionResourceToBeSwitchedDLItem.h>

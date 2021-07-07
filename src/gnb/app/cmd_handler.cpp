@@ -176,7 +176,7 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         m_base->ngapTask->handleXnHandover(asAmfId, amfUeNgapId, ranUeNgapId, ctxtId, ulStr, amf_name);
         
         break;
-    }    
+    }     
     }
 }
 

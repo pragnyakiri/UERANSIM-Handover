@@ -84,7 +84,7 @@ class NgapTask : public NtsTask
     void handleAssociationShutdown(int amfId);
     void sendNgSetupRequest(int amfId);
     void sendErrorIndication(int amfId, NgapCause cause = NgapCause::Protocol_unspecified, int ueId = 0);
-    // Pradnya
+  // Pradnya
     void handoverPreparation(int ueId);
     void handleXnHandover(int asAmfId, int64_t amfUeNgapId, int64_t ranUeNgapId, int ctxtId, int ulStr, std::string amf_name);
     void receiveNgSetupResponse(int amfId, ASN_NGAP_NGSetupResponse *msg);

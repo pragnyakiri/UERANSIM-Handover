@@ -122,7 +122,6 @@ void GtpTask::handleSessionCreate(PduSessionResource *session)
     m_pduSessions[sessionInd] = std::unique_ptr<PduSessionResource>(session);
 
     m_sessionTree.insert(sessionInd, session->downTunnel.teid);
-    m_logger->debug("ue id: %d", session->ueId);
 
     updateAmbrForUe(session->ueId);
     updateAmbrForSession(sessionInd);

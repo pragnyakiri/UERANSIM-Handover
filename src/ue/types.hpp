@@ -12,7 +12,9 @@
 
 #include <array>
 #include <atomic>
+#include <deque>
 #include <memory>
+#include <queue>
 #include <set>
 #include <unordered_set>
 
@@ -153,7 +155,7 @@ struct UeConfig
 struct CellSelectionReport
 {
     int outOfPlmnCells{};
-    int sib1MissingCells{};
+    int siMissingCells{};
     int reservedCells{};
     int barredCells{};
     int forbiddenTaiCells{};
@@ -444,6 +446,23 @@ struct NasSecurityContext
         uplinkCount.sqn = static_cast<uint8_t>((((int)uplinkCount.sqn + 1) & 0xFF));
         if (uplinkCount.sqn == 0)
             uplinkCount.overflow = octet2(((int)uplinkCount.overflow + 1) & 0xFFFF);
+    }
+
+    void rollbackCountOnEncrypt()
+    {
+        if (uplinkCount.sqn == 0)
+        {
+            uplinkCount.sqn = 0xFF;
+
+            if ((int)uplinkCount.overflow == 0)
+                uplinkCount.overflow = octet2{0xFFFF};
+            else
+                uplinkCount.overflow = octet2{(int)uplinkCount.overflow - 1};
+        }
+        else
+        {
+            uplinkCount.sqn = static_cast<uint8_t>(((int)uplinkCount.sqn - 1) & 0xFF);
+        }
     }
 
     [[nodiscard]] NasSecurityContext deepCopy() const
