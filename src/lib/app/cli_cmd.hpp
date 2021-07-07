@@ -41,7 +41,6 @@ struct GnbCliCommand
 
     // Pradnya
     // HANDOVERPREPARE
-    int ueid{};
 
     // HANDOVER
     int asAmfId{};
