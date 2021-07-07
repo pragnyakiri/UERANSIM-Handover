@@ -163,7 +163,7 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         if (m_base->ngapTask->m_ueCtx.count(msg.cmd->ueId) == 0)
             sendError(msg.address, "UE not found with given ID");
         else
-            m_base->ngapTask->handoverPreparation(ueId);
+            m_base->ngapTask->handoverPreparation(ueid);
         
         break;
     }
