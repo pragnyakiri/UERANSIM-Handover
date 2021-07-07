@@ -158,13 +158,12 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
     }
     // Pradnya
     case app::GnbCliCommand::HANDOVERPREPARE: {
-        int ueid = msg.cmd->ueid;
-        int ueid1 = msg.cmd->ueId;
-        std::cout << " ueid: "<< ueid << " " << ueid1 << std::endl;
-        if (m_base->ngapTask->m_ueCtx.count(msg.cmd->ueid) == 0)
+        int ueid = msg.cmd->ueId;
+        std::cout << " ueid: "<< ueid << std::endl;
+        if (m_base->ngapTask->m_ueCtx.count(msg.cmd->ueId) == 0)
             sendError(msg.address, "UE not found with given ID");
         else
-            m_base->ngapTask->handoverPreparation(ueid);
+            m_base->ngapTask->handoverPreparation(ueId);
         
         break;
     }
