@@ -255,6 +255,7 @@ void NgapTask::sendErrorIndication(int amfId, NgapCause cause, int ueId)
         sendNgapNonUe(amfId, pdu);
 }
 
+/* 
 // Pradnya
 void NgapTask::handoverPreparation(int ueId) 
 {
@@ -262,30 +263,30 @@ void NgapTask::handoverPreparation(int ueId)
     // Print the various parameters to pass on to handleXnHandover
     m_logger->debug("handoverPreparation ueId: %d", ueId);
 
-    /* Find UE and AMF contexts */
+    Find UE and AMF contexts 
 
     auto *ue = findUeContext(ueId);
-    /*if (ue == nullptr)
+    if (ue == nullptr)
     {
         asn::Free(asn_DEF_ASN_NGAP_NGAP_PDU, pdu);
         return;
-    }*/
+    }
     m_logger->debug("amfId: %d", ue->associatedAmfId);
     m_logger->debug("ue->amfUeNgapId: %d", ue->amfUeNgapId);
     m_logger->debug("ue->ranUeNgapId: %d", ue->ranUeNgapId);
 
     auto *amf = findAmfContext(ue->associatedAmfId);
-    /*if (amf == nullptr)
+    if (amf == nullptr)
     {
         asn::Free(asn_DEF_ASN_NGAP_NGAP_PDU, pdu);
         return;
-    }*/
+    }
 
     m_logger->debug("amf->amfName: %s", amf->amfName.c_str());
     m_logger->debug("amf->ctxId: %d", amf->ctxId);
     m_logger->debug("ue->uplinkStream: %d", ue->uplinkStream);
 
-}
+} */
 
 // Pradnya
 void NgapTask::handleXnHandover(int asAmfId, int64_t amfUeNgapId, int64_t ranUeNgapId, int ctxtId, int ulStr, std::string amf_name)
