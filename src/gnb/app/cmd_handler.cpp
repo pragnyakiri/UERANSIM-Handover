@@ -18,6 +18,7 @@
 #include <utils/printer.hpp>
 //Pradnya
 #include <iostream>
+#include <string> 
 
 #define PAUSE_CONFIRM_TIMEOUT 3000
 #define PAUSE_POLLING 10
@@ -158,14 +159,26 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
     }
     // Pradnya
     case app::GnbCliCommand::HANDOVERPREPARE: {
+        
+        Json json = Json::Arr({});
         int ueid = msg.cmd->ueId;
-        std::cout << " ueid: "<< ueid << std::endl;
+        //std::cout << " ueid: "<< ueid << std::endl;
         if (m_base->ngapTask->m_ueCtx.count(msg.cmd->ueId) == 0)
             sendError(msg.address, "UE not found with given ID");
         else
         {
-            m_base->ngapTask->handoverPreparation(ueid);
-            sendResult(msg.address, "Check the logs. Details printed there");
+            auto *ue = m_base->ngapTask->findUeContext(ueid);
+            auto *amf = m_base->ngapTask->findAmfContext(ue->associatedAmfId);
+            json.push(Json::Obj({
+                {"ue-id", ueid},
+                {"AMF UE NGAP ID", std::to_string(ue->amfUeNgapId)},
+                {"RAN UE NGAP ID", std::to_string(ue->ranUeNgapId)},
+                {"UE uplink  stream ID", std::to_string(ue->uplinkStream)},
+                {"AMF ID", std::to_string(ue->associatedAmfId)},
+                {"AMF CTX ID", std::to_string(amf->ctxId)},
+                {"AMF name",amf->amfName},
+            }));
+            sendResult(msg.address, json.dumpYaml());
         }
         break;
     }
